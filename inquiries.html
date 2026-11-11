@@ -19,41 +19,71 @@
       <option value="기타문의">기타 문의</option>
     </select>
     <select id="statusSel">
-      <option value="open">처리 필요 (신규·연락완료·보류)</option>
+      <option value="open">처리 중 (신규·연락완료·보류)</option>
       <option value="신규">신규</option>
       <option value="연락완료">연락완료</option>
       <option value="보류">보류</option>
       <option value="전환완료">전환완료</option>
-      <option value="종료">종료</option>
+      <option value="취소">취소</option>
       <option value="">전체</option>
     </select>
+    <button class="primary" id="newBtn">+ 접수 직접 등록</button>
   </div>
   <div class="card">
     <div class="scroll">
       <table>
-        <thead><tr><th>접수</th><th>유형</th><th>이름</th><th>연락처</th><th>내용</th><th>경로</th><th>상태</th><th></th></tr></thead>
+        <thead><tr><th>접수</th><th>유형</th><th>이름</th><th>연락처</th><th>내용</th><th>경로</th><th>담당</th><th>상태</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
     <div class="muted" id="empty"></div>
   </div>
   <div class="muted" id="purgeBox" hidden style="margin-top:8px">
-    개인정보 보관 기간: 전환완료·종료된 접수는 1년이 지나면 정리할 수 있습니다.
+    개인정보 보관 기간: 전환완료·취소된 접수는 1년이 지나면 정리할 수 있습니다.
     <button id="purge" style="margin-left:6px">보관 기간 지난 접수 정리</button>
   </div>
 </main>
 
-<dialog id="idlg" style="width:min(620px,94vw)">
+<dialog id="idlg" style="width:min(640px,94vw)">
   <h2 id="iTitle">접수 내용</h2>
   <div class="muted" id="iSub"></div>
-  <dl id="iBody" style="margin:12px 0 0"></dl>
+  <div id="iBody" style="margin-top:12px"></div>
+  <div class="acts" id="iEditBar" style="margin-top:8px"></div>
+  <label class="f" for="iAssignee">담당자</label>
+  <input type="text" id="iAssignee" maxlength="50" placeholder="예: 홍길동">
   <label class="f" for="iMemo">직원 메모</label>
   <textarea id="iMemo" rows="2" maxlength="500"></textarea>
   <div class="msg" id="iErr"></div>
   <div class="acts" id="iActions" style="margin-top:10px"></div>
   <div class="formbtns">
-    <button type="button" id="iSaveMemo">메모 저장</button>
+    <button type="button" id="iSaveMemo">담당자·메모 저장</button>
     <button type="button" id="iClose">닫기</button>
+  </div>
+</dialog>
+
+<dialog id="ndlg" style="width:min(600px,94vw)">
+  <h2>전화·방문 문의 직접 등록</h2>
+  <div class="muted">전화·문자·카톡·방문으로 받은 상담을 접수함에 올립니다. 같은 연락처의 처리 중 접수가 있으면 자동으로 합쳐집니다.</div>
+  <div class="checks" style="margin-top:8px">
+    <select id="nType">
+      <option value="인력요청">인력 요청(구인)</option>
+      <option value="구직">구직</option>
+      <option value="기타문의">기타 문의</option>
+    </select>
+    <select id="nChannel">
+      <option>전화</option><option>문자</option><option>카톡</option><option>방문</option><option>기타</option>
+    </select>
+  </div>
+  <div id="nFields"></div>
+  <label class="f" for="nAssignee">담당자</label>
+  <input type="text" id="nAssignee" maxlength="50">
+  <label class="f" for="nMemo">직원 메모</label>
+  <textarea id="nMemo" rows="2" maxlength="500"></textarea>
+  <label class="f"><span class="checks"><label><input type="checkbox" id="nAgree"> 상담하신 분에게 개인정보 수집·이용 동의를 받았습니다 (구두 포함)</label></span></label>
+  <div class="msg" id="nErr"></div>
+  <div class="formbtns">
+    <button type="button" id="nCancel">취소</button>
+    <button type="button" class="primary" id="nSave">등록</button>
   </div>
 </dialog>
 
