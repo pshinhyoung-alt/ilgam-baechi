@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>일잡코리아 인력배치 - 인력의뢰</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<header class="top"><h1>인력의뢰 접수</h1><nav id="nav"></nav></header>
+<main>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="의뢰인·현장 주소 검색">
+    <select id="view"></select>
+    <button class="primary" id="add">+ 인력의뢰 접수</button>
+  </div>
+  <div class="card">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>작업 일시</th><th>의뢰인</th><th>직종</th><th>배치/필요</th><th>현장</th><th>제시 단가</th><th>확정 단가</th><th>출근 반경</th><th>상태</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="muted" id="empty"></div>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <form id="f">
+    <h2 id="dlgTitle">인력의뢰 접수</h2>
+    <div id="branchRow" hidden>
+      <label class="f" for="branch">지점</label>
+      <select id="branch"></select>
+    </div>
+    <label class="f" for="client">의뢰인 *</label>
+    <select id="client" required></select>
+    <div class="muted">목록에 없으면 먼저 <a href="clients.html">의뢰인</a> 메뉴에서 등록해 주세요.</div>
+    <label class="f" for="date">작업 날짜 *</label>
+    <input type="date" id="date" required>
+    <label class="f">작업 시간 *</label>
+    <div class="checks"><span class="checks" id="startBox"></span> ~ <span class="checks" id="endBox"></span></div>
+    <div class="muted">분은 10분 단위로 선택합니다.</div>
+    <label class="f" for="address">현장 주소 *</label>
+    <input type="text" id="address" required maxlength="200">
+    <label class="f">현장 좌표 (구직자 출근 위치 확인에 필요)</label>
+    <div class="checks">
+      <input type="number" id="lat" step="any" placeholder="위도 (예: 37.35)" style="width:150px">
+      <input type="number" id="lng" step="any" placeholder="경도 (예: 127.95)" style="width:150px">
+    </div>
+    <div class="acts" style="margin-top:6px">
+      <button type="button" id="geo">주소로 좌표 찾기</button>
+      <button type="button" id="geoHere">내 현재 위치로 입력</button>
+    </div>
+    <div class="muted" id="geoNote"></div>
+    <label class="f" for="job">직종 *</label>
+    <select id="job" required></select>
+    <label class="f" for="headcount">필요 인원 *</label>
+    <input type="number" id="headcount" min="1" value="1" required style="width:100px">
+    <label class="f" for="req">요구 조건 (자격증·성별·경력 등)</label>
+    <textarea id="req" rows="2" maxlength="500"></textarea>
+    <label class="f" for="certPref">요양보호사 자격증</label>
+    <select id="certPref">
+      <option value="none">상관없음</option>
+      <option value="prefer">있는 분 우선</option>
+      <option value="require">필수 (자격증 사본이 등록된 분만 배치)</option>
+    </select>
+    <label class="f" for="offered">의뢰인 제시 일당 (원) *</label>
+    <input type="number" id="offered" min="1" step="1" required>
+    <label class="f" for="wage">확정 단가 (원)</label>
+    <input type="number" id="wage" min="1" step="1">
+    <div class="muted" id="wageNote"></div>
+    <div class="msg" id="wageWarn" style="color:#b26a00"></div>
+    <label class="f"><span class="checks"><label><input type="checkbox" id="feeOn"> 소개수수료 적용</label></span></label>
+    <div id="feeBox" hidden>
+      <div class="checks"><input type="number" id="feeRate" min="0" max="100" step="0.1" style="width:100px"> %</div>
+      <div class="muted" id="feeNote"></div>
+      <div class="muted" id="feePreview"></div>
+      <div class="msg" id="feeWarn" style="color:#b26a00"></div>
+    </div>
+    <label class="f"><span class="checks"><label><input type="checkbox" id="taxOn"> 사업소득세 원천징수 3.3% 공제</label></span></label>
+    <div id="taxBox" hidden>
+      <div class="muted">소득세 3% + 지방소득세 0.3%를 일당에서 소개수수료를 뺀 금액을 기준으로 계산해 공제합니다. 4대보험은 공제하지 않습니다.</div>
+      <div class="muted" id="taxPreview"></div>
+    </div>
+    <div class="muted" id="netPreview" style="margin-top:6px;font-weight:600"></div>
+    <label class="f" for="radius">배치된 구직자 출근 반경 (m)</label>
+    <input type="number" id="radius" min="50" max="2000" step="1" style="width:120px">
+    <div class="muted">현장마다 바꿀 수 있습니다. 50~2000m</div>
+    <div class="msg" id="err"></div>
+    <div class="formbtns">
+      <button type="button" id="cancel">취소</button>
+      <button type="submit" class="primary" id="save">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="hdlg"style="width:min(720px,94vw)">
+  <h2>단가 변경 이력</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>일시</th><th>변경한 사람</th><th>항목</th><th>금액</th><th>사유</th></tr></thead>
+    <tbody id="hrows"></tbody>
+  </table></div>
+  <div class="formbtns"><button type="button" id="hclose">닫기</button></div>
+</dialog>
+
+<dialog id="adlg" style="width:min(780px,94vw)">
+  <h2>구직자 배치</h2>
+  <div class="muted" id="aSummary"></div>
+  <div class="msg" id="aNoCoord" style="color:#b26a00"></div>
+  <h3 style="font-size:15px;margin:14px 0 6px">배치된 구직자 <span class="muted" id="aCount"></span></h3>
+  <div class="scroll"><table><tbody id="aAssigned"></tbody></table></div>
+  <div class="muted" id="aAssignedEmpty"></div>
+  <div class="muted" id="aPast"></div>
+  <div class="muted" id="aConfirmedNote" style="color:#1b7f3b"></div>
+  <h3 style="font-size:15px;margin:16px 0 6px">배치할 구직자 고르기</h3>
+  <input type="search" id="aQ" placeholder="이름·전화번호 검색" style="width:100%;margin-bottom:6px">
+  <div class="muted" id="aNote"></div>
+  <div class="scroll" style="max-height:300px;overflow:auto"><table><tbody id="aCands"></tbody></table></div>
+  <div class="muted" id="aCandsEmpty"></div>
+  <div class="muted" id="aInfo" style="color:#1b7f3b"></div>
+  <div class="msg" id="aErr"></div>
+  <div class="formbtns">
+    <button type="button" class="primary" id="aConfirm" hidden>배치 확정</button>
+    <button type="button" id="aClose">닫기</button>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="assign.js"></script>
+<script src="requests.js"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>일잡코리아 인력배치 - 관리</title>
+<style>
+  body { font-family: system-ui, "Malgun Gothic", sans-serif; background: #f4f6f8; margin: 0; }
+  header { background: #fff; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  header h1 { font-size: 18px; margin: 0; }
+  main { max-width: 760px; margin: 20px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+  .card h2 { font-size: 16px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid #e6eaee; }
+  button { padding: 7px 12px; font-size: 14px; border: 1px solid #c9d0d8; border-radius: 8px; background: #fff; cursor: pointer; }
+  .msg { color: #c62828; }
+  .muted { color: #667; font-size: 13px; }
+  nav { display: flex; gap: 6px; align-items: center; }
+  nav a { padding: 7px 12px; border-radius: 8px; text-decoration: none; color: #1c2430; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>일잡코리아 인력배치</h1>
+  <nav>
+    <a href="requests.html">인력의뢰</a>
+    <a href="workers.html">구직자</a>
+    <a href="clients.html">의뢰인</a>
+    <a href="settings.html" id="navSettings" hidden>설정</a>
+    <button id="logout">로그아웃</button>
+  </nav>
+</header>
+<main>
+  <div class="card" id="me"><span class="muted">불러오는 중...</span></div>
+  <div class="card" id="staffCard" hidden>
+    <h2>직원 목록</h2>
+    <table>
+      <thead><tr><th>이름</th><th>권한</th><th>단가·수수료 수정</th><th id="actCol"></th></tr></thead>
+      <tbody id="staffRows"></tbody>
+    </table>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+  const cfg = window.APP_CONFIG;
+  const db = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
+  const ROLE = { hq_admin: "본사 관리자", branch_manager: "지점장", branch_staff: "지점 직원" };
+  const meBox = document.getElementById("me");
+
+  function el(tag, text, cls) {
+    const n = document.createElement(tag);
+    if (text !== undefined) n.textContent = text;
+    if (cls) n.className = cls;
+    return n;
+  }
+  function showMsg(text) {
+    meBox.replaceChildren(el("div", text, "msg"));
+  }
+
+  document.getElementById("logout").addEventListener("click", async () => {
+    await db.auth.signOut();
+    location.replace("index.html");
+  });
+
+  async function init() {
+    const { data: s } = await db.auth.getSession();
+    if (!s.session) return location.replace("index.html");
+    const uid = s.session.user.id;
+
+    const { data: me, error } = await db.from("staff").select("*").eq("user_id", uid).maybeSingle();
+    if (error) return showMsg("정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    if (!me || !me.active) return showMsg("등록되지 않았거나 사용이 중지된 계정입니다. 본사 관리자에게 문의하세요.");
+
+    let branchName = "전체 지점";
+    if (me.branch_id) {
+      const { data: b } = await db.from("branches").select("name").eq("id", me.branch_id).maybeSingle();
+      branchName = b ? b.name : "-";
+    }
+    meBox.replaceChildren(
+      el("h2", me.name + " 님"),
+      el("div", "권한: " + ROLE[me.role]),
+      el("div", "소속: " + branchName),
+      el("div", "단가·수수료 수정: " + (me.can_edit_wage ? "가능" : "불가"), "muted")
+    );
+
+    if (me.role === "branch_staff") return;
+    document.getElementById("navSettings").hidden = false;
+    await loadStaff(me);
+  }
+
+  async function loadStaff(me) {
+    const { data: rows, error } = await db.from("staff").select("*").order("created_at");
+    if (error) return;
+    const isHq = me.role === "hq_admin";
+    document.getElementById("staffCard").hidden = false;
+    document.getElementById("actCol").textContent = isHq ? "변경" : "";
+
+    const tbody = document.getElementById("staffRows");
+    tbody.replaceChildren();
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.append(el("td", r.name), el("td", ROLE[r.role]), el("td", r.can_edit_wage ? "가능" : "불가"));
+      const act = el("td");
+      if (isHq) {
+        const b = el("button", r.can_edit_wage ? "단가·수수료 수정 끄기" : "단가·수수료 수정 켜기");
+        b.addEventListener("click", async () => {
+          b.disabled = true;
+          const { error } = await db.from("staff").update({ can_edit_wage: !r.can_edit_wage }).eq("user_id", r.user_id);
+          if (error) { alert("변경하지 못했습니다."); b.disabled = false; return; }
+          loadStaff(me);
+        });
+        act.append(b);
+      }
+      tr.append(act);
+      tbody.append(tr);
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

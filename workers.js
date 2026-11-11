@@ -1,0 +1,443 @@
+(async () => {
+  const me = await requireStaff("workers.html");
+  if (!me) return;
+  const isAdmin = me.role !== "branch_staff";
+  const isHq = me.role === "hq_admin";
+  const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
+  const DOC_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+
+  let jobTypes = [], branches = [], rows = [], editing = null;
+  let docs = {};          // 구직자 id -> { id_card: 서류정보, bankbook: 서류정보 }
+  let hints = {};         // 구직자 id -> "농협 ****1234"
+  let privateReady = true; // 서류·계좌 기능(SQL 10)이 준비되었는지
+  const $ = (id) => document.getElementById(id);
+
+  // 보기 선택: 휴지통은 관리자만
+  const views = [["all", "전체"], ["active", "활동 중"], ["paused", "활동 중지"]];
+  if (isAdmin) views.push(["trash", "휴지통"]);
+  for (const [v, label] of views) $("view").append(new Option(label, v));
+
+  async function loadBase() {
+    const [jt, br] = await Promise.all([
+      db.from("job_types").select("*").eq("active", true).order("sort_order"),
+      db.from("branches").select("id,name").order("name"),
+    ]);
+    jobTypes = jt.data || [];
+    branches = br.data || [];
+    for (const j of jobTypes) {
+      const lab = el("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = j.id;
+      cb.addEventListener("change", updateQualVisibility);
+      cb.addEventListener("change", updateTrainVisibility);
+      lab.append(cb, document.createTextNode(j.name));
+      $("jobs").append(lab);
+    }
+    for (const d of DAYS) {
+      const lab = el("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = d;
+      lab.append(cb, document.createTextNode(d));
+      $("days").append(lab);
+    }
+    if (isHq) {
+      $("branchRow").hidden = false;
+      for (const b of branches) $("branch").append(new Option(b.name, b.id));
+    }
+  }
+
+  async function load() {
+    const [w, d, h] = await Promise.all([
+      db.from("workers").select("*").order("created_at", { ascending: false }),
+      db.from("worker_documents").select("*"),
+      db.rpc("worker_bank_hints"),
+    ]);
+    if (w.error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
+    rows = w.data;
+    privateReady = !d.error && !h.error;
+    docs = {};
+    for (const x of d.data || []) (docs[x.worker_id] = docs[x.worker_id] || {})[x.kind] = x;
+    hints = {};
+    for (const x of h.data || []) hints[x.worker_id] = x.bank_hint;
+    render();
+  }
+
+  function render() {
+    const q = $("q").value.trim().toLowerCase();
+    const qd = digits(q);
+    const view = $("view").value;
+    const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
+    const list = rows.filter((r) => {
+      const trashed = !!r.deleted_at;
+      if (view === "trash" ? !trashed : trashed) return false;
+      if (view === "active" && r.status !== "active") return false;
+      if (view === "paused" && r.status !== "paused") return false;
+      if (!q) return true;
+      return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
+    });
+
+    const tbody = $("rows");
+    tbody.replaceChildren();
+    $("empty").textContent = list.length ? "" : "표시할 구직자가 없습니다.";
+    const reqCert = new Set(jobTypes.filter((j) => j.qualification_required).map((j) => j.id));
+    const reqTrain = new Set(jobTypes.filter((j) => j.training_required).map((j) => j.id));
+    for (const r of list) {
+      const tr = document.createElement("tr");
+      const nameTd = el("td", r.name);
+      if (!r.consent_confirmed) nameTd.append(el("div", "동의 확인 필요", "tag warn"));
+      if (r.training_done) nameTd.append(el("div", "자체교육 이수", "tag"));
+      else if (r.job_type_ids.some((id) => reqTrain.has(id))) nameTd.append(el("div", "자체교육 미이수", "tag warn"));
+      if (privateReady && !r.deleted_at) {
+        const d = docs[r.id] || {};
+        const miss = el("div");
+        if (!d.id_card) miss.append(el("span", "신분증 미등록", "tag warn"));
+        // 자격증이 있으면 표시. 없으면 '미등록 경고(필수)'로 지정한 직종(요양보호사)일 때만 경고
+        if (d.qualification) miss.append(el("span", "요양보호사 자격증", "tag"));
+        else if (r.job_type_ids.some((id) => reqCert.has(id))) miss.append(el("span", "자격증 미등록", "tag warn"));
+        if (!d.bankbook) miss.append(el("span", "통장사본 미등록", "tag warn"));
+        if (!hints[r.id]) miss.append(el("span", "계좌 미등록", "tag warn"));
+        nameTd.append(miss);
+      }
+      const jobsTd = el("td");
+      for (const id of r.job_type_ids) jobsTd.append(el("span", jobName[id] || "(삭제된 직종)", "tag"));
+      const stTd = el("td", r.deleted_at ? "휴지통" : r.status === "paused" ? "활동 중지" : "활동 중");
+      tr.append(nameTd, el("td", fmtPhone(r.phone)), jobsTd, el("td", r.area || ""),
+        el("td", DAYS.filter((d) => r.available_days.includes(d)).join(" ")), stTd, actions(r));
+      tbody.append(tr);
+    }
+  }
+
+  function btn(label, cls, fn) {
+    const b = el("button", label, cls);
+    b.type = "button";
+    b.addEventListener("click", async () => { b.disabled = true; await fn(); b.disabled = false; });
+    return b;
+  }
+
+  async function run(promise, failMsg) {
+    const { error } = await promise;
+    if (error) { alert(error.message.includes("관리자만") ? error.message : failMsg); return false; }
+    await load();
+    return true;
+  }
+
+  function actions(r) {
+    const td = el("td");
+    const box = el("div", undefined, "acts");
+    if (r.deleted_at) {
+      box.append(
+        btn("복구", "", () => run(db.from("workers").update({ deleted_at: null }).eq("id", r.id), "복구하지 못했습니다.")),
+        btn("완전 삭제", "danger", async () => {
+          if (!confirm(r.name + " 님을 완전히 삭제합니다. 되돌릴 수 없습니다. 계속할까요?")) return;
+          await run(db.from("workers").delete().eq("id", r.id), "삭제하지 못했습니다. 이 구직자와 연결된 기록(배치·서류·계좌 등)이 있을 수 있습니다.");
+        }));
+    } else {
+      box.append(btn("수정", "", async () => openForm(r)));
+      if (isAdmin) {
+        box.append(
+          btn(r.status === "paused" ? "활동 재개" : "활동 중지", "",
+            () => run(db.from("workers").update({ status: r.status === "paused" ? "active" : "paused" }).eq("id", r.id), "변경하지 못했습니다.")),
+          btn("삭제", "danger", async () => {
+            if (!confirm(r.name + " 님을 휴지통으로 보냅니다. 휴지통에서 복구할 수 있습니다.")) return;
+            await run(db.from("workers").update({ deleted_at: new Date().toISOString() }).eq("id", r.id), "삭제하지 못했습니다.");
+          }));
+      }
+    }
+    td.append(box);
+    return td;
+  }
+
+  // ───────── 서류·계좌 ─────────
+  async function viewDoc(doc) {
+    const win = window.open("", "_blank");
+    if (!win) { alert("팝업이 막혀 있습니다. 주소창 오른쪽에서 팝업을 허용한 뒤 다시 눌러 주세요."); return; }
+    const { data: path, error } = await db.rpc("doc_view_path", { p_doc: doc.id });
+    if (error) { win.close(); alert(/[가-힣]/.test(error.message) ? error.message : "열지 못했습니다."); return; }
+    const { data, error: e2 } = await db.storage.from("worker-docs").createSignedUrl(path, 60);
+    if (e2 || !data) { win.close(); alert("파일을 열지 못했습니다."); return; }
+    win.location = data.signedUrl;
+  }
+
+  async function deleteDoc(doc, label) {
+    if (!confirm(label + " 사본을 삭제합니다. 되돌릴 수 없습니다. 계속할까요?")) return;
+    const rm = await db.storage.from("worker-docs").remove([doc.path]);
+    if (rm.error) { alert("파일을 삭제하지 못했습니다."); return; }
+    const { error } = await db.from("worker_documents").delete().eq("id", doc.id);
+    if (error) { alert("삭제하지 못했습니다."); return; }
+    await load();
+    refreshPrivateUI();
+  }
+
+  function renderDocBox(kind, boxId, fileId, label) {
+    const box = $(boxId);
+    box.replaceChildren();
+    const doc = editing && docs[editing.id] && docs[editing.id][kind];
+    $(fileId).value = "";
+    if (doc) {
+      box.append(el("span", "등록됨", "tag"));
+      // 신분증은 직원도 열람·제공 가능, 통장 사본은 관리자만
+      if (kind !== "bankbook" || isAdmin) box.append(btn("보기", "", () => viewDoc(doc)));
+      if (kind !== "bankbook") box.append(btn("의뢰처에 제공", "primary", async () => openShare(kind, label)));
+      if (isAdmin) {
+        box.append(btn("삭제", "danger", () => deleteDoc(doc, label)), el("span", "새 파일을 고르면 교체됩니다.", "muted"));
+      } else {
+        box.append(el("span", kind !== "bankbook" ? "교체·삭제는 관리자만 할 수 있습니다." : "열람·교체는 관리자만 할 수 있습니다.", "muted"));
+      }
+    } else {
+      box.append(el("span", "미등록", "tag warn"));
+    }
+    $(fileId).disabled = !!doc && !isAdmin;
+  }
+
+  // 자격증 칸은 설정에서 '자격증 칸 표시'로 지정한 직종(예: 요양보호사, 간병·돌봄)을 고른 구직자,
+  // 또는 이미 자격증이 등록된 구직자에게만 보임
+  function updateQualVisibility() {
+    const care = new Set(jobTypes.filter((j) => j.show_qualification).map((j) => j.id));
+    const selected = [...$("jobs").querySelectorAll("input:checked")].some((cb) => care.has(cb.value));
+    const hasDoc = !!(editing && docs[editing.id] && docs[editing.id].qualification);
+    $("qualBox").hidden = !(selected || hasDoc);
+  }
+
+  // 자체교육 칸은 설정에서 '자체교육 필요'로 지정한 직종(예: 간병·돌봄)을 고른 구직자,
+  // 또는 이미 이수로 기록된 구직자에게만 보임
+  function updateTrainVisibility() {
+    const need = new Set(jobTypes.filter((j) => j.training_required).map((j) => j.id));
+    const selected = [...$("jobs").querySelectorAll("input:checked")].some((cb) => need.has(cb.value));
+    $("trainBox").hidden = !(selected || $("trainDone").checked);
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function refreshPrivateUI() {
+    const hint = editing && hints[editing.id];
+    const hintBox = $("bankHint");
+    hintBox.replaceChildren(document.createTextNode(editing ? (hint ? "등록된 계좌: " + hint + " " : "등록된 계좌가 없습니다.") : ""));
+    const locked = !!hint && !isAdmin;
+    for (const id of ["bankName", "bankNo", "bankHolder"]) $(id).disabled = locked;
+    if (locked) hintBox.append(document.createTextNode("(변경은 관리자만 할 수 있습니다)"));
+    if (hint && isAdmin) {
+      hintBox.append(btn("전체 보기·수정", "", async () => {
+        if (!confirm("계좌번호 전체를 열람합니다. 열람 기록이 남습니다. 계속할까요?")) return;
+        const { data, error } = await db.rpc("get_worker_bank", { p_worker: editing.id });
+        if (error || !data) { alert("계좌를 불러오지 못했습니다."); return; }
+        $("bankName").value = data.bank_name;
+        $("bankNo").value = data.account_number;
+        $("bankHolder").value = data.account_holder;
+      }));
+    }
+    renderDocBox("id_card", "idStatus", "idFile", "신분증");
+    renderDocBox("qualification", "qualStatus", "qualFile", "자격증");
+    renderDocBox("bankbook", "bookStatus", "bookFile", "통장");
+    updateQualVisibility();
+    updateTrainVisibility();
+  }
+
+  // 이수 체크하면 오늘 날짜를 채우고, 체크를 풀면 날짜를 지움
+  $("trainDone").addEventListener("change", () => {
+    if ($("trainDone").checked) { if (!$("trainDate").value) $("trainDate").value = todayStr(); }
+    else $("trainDate").value = "";
+  });
+
+  // ───────── 신분증 사본 의뢰처 제공 ─────────
+  const METHOD = { kakao: "카카오톡", email: "이메일", fax: "팩스", print: "출력·직접 전달", other: "기타" };
+
+  async function loadDisclosures() {
+    const box = $("shareLog");
+    box.replaceChildren();
+    if (!editing || !editing.id || !privateReady) return;
+    const { data, error } = await db.from("document_disclosures").select("*")
+      .eq("worker_id", editing.id).order("sent_at", { ascending: false }).limit(5);
+    if (error) return;
+    if (!data.length) { box.textContent = "서류 제공 기록이 없습니다."; return; }
+    box.append(document.createTextNode("서류 제공 기록(최근 5건)"));
+    for (const x of data) {
+      const d = new Date(x.sent_at);
+      const when = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      box.append(el("div", "· " + when + " [" + (x.kind === "id_card" ? "신분증" : "자격증") + "] " + x.recipient + " (" + METHOD[x.method] + ", " + (x.sent_by_name || "-") + ")" + (x.memo ? " — " + x.memo : "")));
+    }
+  }
+
+  let shareKind = "id_card";
+
+  async function openShare(kind, label) {
+    shareKind = kind;
+    $("sTitle").textContent = label + " 사본 제공";
+    if (!editing || !editing.share_consent) {
+      alert("이 구직자는 " + label + " 사본을 의뢰처에 제공하는 것에 대한 동의가 확인되지 않았습니다.\n동의를 받은 뒤 '의뢰처에 제공하는 것에 동의를 받았음'을 체크하고 저장해 주세요.");
+      return;
+    }
+    const { data: cl } = await db.from("clients").select("id,name,branch_id").is("deleted_at", null).order("name");
+    const sel = $("shareClient");
+    sel.replaceChildren(new Option("직접 입력", ""));
+    for (const c of cl || []) if (c.branch_id === editing.branch_id) sel.append(new Option(c.name, c.id));
+    $("shareName").value = "";
+    $("shareMemo").value = "";
+    $("shareMethod").value = "kakao";
+    $("shareErr").textContent = "";
+    $("sdlg").showModal();
+  }
+
+  $("shareCancel").addEventListener("click", () => $("sdlg").close());
+  $("shareOk").addEventListener("click", async () => {
+    const clientId = $("shareClient").value || null;
+    const name = $("shareName").value.trim();
+    if (!clientId && !name) { $("shareErr").textContent = "받는 곳을 선택하거나 이름을 입력해 주세요."; return; }
+    $("shareOk").disabled = true;
+    $("shareErr").textContent = "";
+    const { data: path, error } = await db.rpc("record_disclosure", {
+      p_worker: editing.id, p_kind: shareKind, p_client: clientId, p_recipient: name,
+      p_method: $("shareMethod").value, p_memo: $("shareMemo").value.trim(),
+    });
+    if (error) {
+      $("shareOk").disabled = false;
+      $("shareErr").textContent = /[가-힣]/.test(error.message) ? error.message : "기록하지 못했습니다.";
+      return;
+    }
+    const ext = (path.split(".").pop() || "jpg");
+    const { data, error: e2 } = await db.storage.from("worker-docs").createSignedUrl(path, 60, { download: (shareKind === "id_card" ? "신분증_" : "자격증_") + editing.name + "." + ext });
+    $("shareOk").disabled = false;
+    if (e2 || !data) {
+      $("shareErr").textContent = "제공 기록은 남았지만 파일을 내려받지 못했습니다. [보기]로 다시 열어 주세요.";
+      await loadDisclosures();
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = data.signedUrl;
+    a.download = "";
+    document.body.append(a);
+    a.click();
+    a.remove();
+    $("sdlg").close();
+    await loadDisclosures();
+  });
+
+  async function uploadDoc(worker, kind, file) {
+    if (file.size > 10 * 1024 * 1024) throw new Error("파일은 10MB 이하로 올려 주세요.");
+    if (!DOC_TYPES.includes(file.type)) throw new Error("사진(JPG·PNG·WEBP) 또는 PDF만 올릴 수 있습니다.");
+    const ext = ((file.name.split(".").pop() || "dat").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5)) || "dat";
+    const path = worker.branch_id + "/" + worker.id + "/" + kind + "-" + Date.now() + "." + ext;
+    const up = await db.storage.from("worker-docs").upload(path, file, { contentType: file.type, upsert: false });
+    if (up.error) throw new Error("파일을 올리지 못했습니다.");
+
+    const old = docs[worker.id] && docs[worker.id][kind];
+    if (old) {
+      const { error } = await db.from("worker_documents").update({ path }).eq("id", old.id);
+      if (error) { await db.storage.from("worker-docs").remove([path]); throw new Error("서류 정보를 바꾸지 못했습니다."); }
+      await db.storage.from("worker-docs").remove([old.path]);
+    } else {
+      const { error } = await db.from("worker_documents").insert({ worker_id: worker.id, kind, path });
+      if (error) { await db.storage.from("worker-docs").remove([path]); throw new Error("서류 정보를 저장하지 못했습니다."); }
+    }
+  }
+
+  function openForm(r) {
+    editing = r || null;
+    $("dlgTitle").textContent = r ? "구직자 수정" : "구직자 등록";
+    $("name").value = r ? r.name : "";
+    $("phone").value = r ? fmtPhone(r.phone) : "";
+    $("area").value = r ? r.area || "" : "";
+    $("memo").value = r ? r.memo || "" : "";
+    $("consent").checked = r ? r.consent_confirmed : false;
+    $("shareConsent").checked = r ? !!r.share_consent : false;
+    $("trainDone").checked = r ? !!r.training_done : false;
+    $("trainDate").value = r && r.training_date ? r.training_date : "";
+    for (const cb of $("jobs").querySelectorAll("input")) cb.checked = !!r && r.job_type_ids.includes(cb.value);
+    for (const cb of $("days").querySelectorAll("input")) cb.checked = !!r && r.available_days.includes(cb.value);
+    if (isHq) $("branch").value = r ? r.branch_id : (me.branch_id || branches[0]?.id);
+    for (const id of ["bankName", "bankNo", "bankHolder"]) $(id).value = "";
+    refreshPrivateUI();
+    loadDisclosures();
+    $("err").textContent = "";
+    $("dlg").showModal();
+  }
+
+  $("add").addEventListener("click", () => openForm(null));
+  $("cancel").addEventListener("click", () => $("dlg").close());
+  $("q").addEventListener("input", render);
+  $("view").addEventListener("change", render);
+
+  $("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const phone = digits($("phone").value);
+    if (!/^01\d{8,9}$/.test(phone)) { $("err").textContent = "휴대폰 번호를 확인해 주세요. (예: 010-1234-5678)"; return; }
+
+    // 자체교육: 이수했다면 이수일 필요, 미래 날짜는 불가
+    const trainDone = $("trainDone").checked;
+    const trainDate = $("trainDate").value;
+    if (trainDone && !trainDate) { $("err").textContent = "자체교육 이수일을 입력해 주세요."; return; }
+    if (trainDone && trainDate > todayStr()) { $("err").textContent = "자체교육 이수일이 오늘보다 뒤입니다. 날짜를 확인해 주세요."; return; }
+
+    // 계좌: 세 칸 중 하나라도 적었으면 모두 필요
+    const bank = { name: $("bankName").value.trim(), no: $("bankNo").value.trim(), holder: $("bankHolder").value.trim() };
+    const bankTouched = !$("bankName").disabled && (bank.name || bank.no || bank.holder);
+    if (bankTouched && !(bank.name && bank.no && bank.holder)) {
+      $("err").textContent = "계좌 정보는 은행·계좌번호·예금주를 모두 입력해 주세요.";
+      return;
+    }
+
+    const payload = {
+      name: $("name").value.trim(),
+      phone,
+      job_type_ids: [...$("jobs").querySelectorAll("input:checked")].map((c) => c.value),
+      area: $("area").value.trim() || null,
+      available_days: [...$("days").querySelectorAll("input:checked")].map((c) => c.value),
+      memo: $("memo").value.trim() || null,
+      consent_confirmed: $("consent").checked,
+      share_consent: $("shareConsent").checked,
+      training_done: trainDone,
+      training_date: trainDone ? trainDate : null,
+    };
+    if (!editing) payload.branch_id = isHq ? $("branch").value : me.branch_id;
+    else if (isHq) payload.branch_id = $("branch").value;
+
+    $("save").disabled = true;
+    $("err").textContent = "";
+
+    // 1) 구직자 저장
+    let saved;
+    if (editing) {
+      const { error } = await db.from("workers").update(payload).eq("id", editing.id);
+      if (!error) saved = { id: editing.id, branch_id: payload.branch_id || editing.branch_id };
+      var saveError = error;
+    } else {
+      const { data, error } = await db.from("workers").insert(payload).select("id,branch_id").single();
+      if (!error) saved = data;
+      var saveError = error;
+    }
+    if (saveError || !saved) {
+      $("save").disabled = false;
+      $("err").textContent = saveError && saveError.code === "23505" ? "이 지점에 이미 등록된 전화번호입니다." : "저장하지 못했습니다. 입력 내용을 확인해 주세요.";
+      return;
+    }
+    // 이후 오류가 나도 다시 눌렀을 때 중복 등록되지 않도록 수정 상태로 전환
+    editing = { ...(editing || {}), ...payload, ...saved };
+
+    // 2) 계좌, 3) 서류
+    const problems = [];
+    if (bankTouched) {
+      const { error } = await db.rpc("set_worker_bank", { p_worker: saved.id, p_bank: bank.name, p_number: bank.no, p_holder: bank.holder });
+      if (error) problems.push(/[가-힣]/.test(error.message) ? error.message : "계좌를 저장하지 못했습니다.");
+    }
+    for (const [kind, fileId, label] of [["id_card", "idFile", "신분증"], ["qualification", "qualFile", "자격증"], ["bankbook", "bookFile", "통장 사본"]]) {
+      if (kind === "qualification" && $("qualBox").hidden) continue;   // 숨겨진 칸의 파일은 올리지 않음
+      const file = $(fileId).files[0];
+      if (!file) continue;
+      try { await uploadDoc(saved, kind, file); } catch (err) { problems.push(label + ": " + err.message); }
+    }
+
+    $("save").disabled = false;
+    await load();
+    if (problems.length) {
+      refreshPrivateUI();
+      $("err").textContent = "구직자 정보는 저장되었지만 다음 항목을 처리하지 못했습니다. " + problems.join(" / ");
+      return;
+    }
+    $("dlg").close();
+  });
+
+  await loadBase();
+  await load();
+})();

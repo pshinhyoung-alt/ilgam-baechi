@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>일잡코리아 인력배치 - 의뢰인</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<header class="top"><h1>의뢰인(고객) 관리</h1><nav id="nav"></nav></header>
+<main>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="이름·업체명·전화번호 검색">
+    <select id="view"></select>
+    <button class="primary" id="add">+ 의뢰인 등록</button>
+  </div>
+  <div class="card">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>이름/업체명</th><th>전화</th><th>주소</th><th>메모</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="muted" id="empty"></div>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <form id="f">
+    <h2 id="dlgTitle">의뢰인 등록</h2>
+    <div id="branchRow" hidden>
+      <label class="f" for="branch">지점</label>
+      <select id="branch"></select>
+    </div>
+    <label class="f" for="name">이름 또는 업체명 *</label>
+    <input type="text" id="name" required maxlength="60">
+    <label class="f" for="phone">전화번호 *</label>
+    <input type="tel" id="phone" required placeholder="010-0000-0000 또는 033-000-0000">
+    <label class="f" for="address">주소</label>
+    <input type="text" id="address" maxlength="200">
+    <label class="f" for="memo">메모</label>
+    <textarea id="memo" rows="2" maxlength="500"></textarea>
+    <div class="msg" id="err"></div>
+    <div class="formbtns">
+      <button type="button" id="cancel">취소</button>
+      <button type="submit" class="primary" id="save">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="clients.js"></script>
+</body>
+</html>
