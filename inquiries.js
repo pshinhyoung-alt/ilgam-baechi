@@ -260,7 +260,20 @@
 
   // ───────── 직접 등록 ─────────
   let newInputs = null;
-  function drawNewFields() { newInputs = buildInputs($("nFields"), $("nType").value, null); }
+  // 같은 연락처의 처리 중 접수가 있으면 알려 줌 (같은 분이면 합쳐지고, 다른 분이면 '새 접수로 등록'을 고르도록)
+  function updateNewHint() {
+    const d = digits(newInputs.phone.value);
+    const type = $("nType").value;
+    const hit = d.length >= 9 ? rows.find((r) => r.phone_digits === d && r.type === type && OPEN.includes(r.status)) : null;
+    $("nHint").textContent = hit
+      ? "같은 연락처의 처리 중 접수 " + hit.receipt_no + " (" + (hit.name || "이름 없음") + ")가 있습니다. 같은 분이면 그대로 등록하세요(합쳐집니다). 다른 분이면 아래 '새 접수로 등록'을 체크하세요."
+      : "";
+  }
+  function drawNewFields() {
+    newInputs = buildInputs($("nFields"), $("nType").value, null);
+    newInputs.phone.addEventListener("input", updateNewHint);
+    updateNewHint();
+  }
   $("newBtn").addEventListener("click", () => {
     $("nType").value = "인력요청";
     $("nChannel").value = "전화";
@@ -268,6 +281,7 @@
     $("nAssignee").value = "";
     $("nMemo").value = "";
     $("nAgree").checked = false;
+    $("nForceNew").checked = false;
     $("nErr").textContent = "";
     $("ndlg").showModal();
   });
@@ -276,6 +290,7 @@
   $("nSave").addEventListener("click", async () => {
     const type = $("nType").value;
     const p = { type: TYPE_CODE[type], channel: $("nChannel").value, agree: $("nAgree").checked ? "동의" : "" };
+    if ($("nForceNew").checked) p.force_new = "true";
     for (const [key, input] of Object.entries(newInputs)) p[PARAM[key] || key] = input.value.trim();
     if (digits(p.phone).length < 9) { $("nErr").textContent = "연락처를 확인해 주세요."; return; }
     if (!$("nAgree").checked) { $("nErr").textContent = "개인정보 수집·이용 동의를 받은 뒤 체크해 주세요."; return; }
