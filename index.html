@@ -5,25 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>일잡코리아 인력배치 - 로그인</title>
+<link rel="stylesheet" href="common.css">
 <style>
-  body { font-family: system-ui, "Malgun Gothic", sans-serif; background: #f4f6f8; margin: 0; display: grid; place-items: center; min-height: 100vh; }
-  .box { background: #fff; padding: 28px 24px; border-radius: 12px; width: min(360px, 90vw); box-shadow: 0 2px 12px rgba(0,0,0,.08); }
-  h1 { font-size: 20px; margin: 0 0 20px; }
-  label { display: block; font-size: 14px; margin: 14px 0 6px; }
-  input { width: 100%; box-sizing: border-box; padding: 11px; font-size: 16px; border: 1px solid #c9d0d8; border-radius: 8px; }
-  button { width: 100%; margin-top: 20px; padding: 12px; font-size: 16px; border: 0; border-radius: 8px; background: #1f6feb; color: #fff; cursor: pointer; }
-  button:disabled { opacity: .6; cursor: default; }
-  .msg { color: #c62828; font-size: 14px; margin-top: 14px; min-height: 18px; }
+  body { display: grid; place-items: center; min-height: 100vh; padding: 20px;
+         background: radial-gradient(900px 500px at 15% -10%, #dfe7ff 0%, rgba(223,231,255,0) 60%),
+                     radial-gradient(800px 500px at 100% 110%, #e6ecff 0%, rgba(230,236,255,0) 60%), var(--bg); }
+  .box { background: #fff; padding: 36px 32px 30px; border-radius: 22px; width: min(400px, 100%);
+         border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(30, 50, 120, .14); }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .logo { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+          background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-size: 22px; font-weight: 800;
+          box-shadow: 0 8px 18px rgba(47, 91, 234, .35); }
+  h1 { font-size: 21px; margin: 0; font-weight: 800; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 22px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #3b475c; margin: 16px 0 6px; }
+  input { width: 100%; padding: 12px 14px; font-size: 16px; }
+  .box button { width: 100%; margin-top: 24px; padding: 13px; font-size: 16px; }
+  .msg { margin-top: 14px; min-height: 18px; }
 </style>
 </head>
 <body>
 <form class="box" id="form">
-  <h1>일잡코리아 인력배치 로그인</h1>
+  <div class="brand"><div class="logo">일</div><h1>일잡코리아</h1></div>
+  <p class="sub">인력 배치·출근 관리 · 직원 로그인</p>
   <label for="email">이메일</label>
   <input id="email" type="email" autocomplete="username" required>
   <label for="pw">비밀번호</label>
   <input id="pw" type="password" autocomplete="current-password" required>
-  <button id="btn" type="submit">로그인</button>
+  <button id="btn" type="submit" class="primary">로그인</button>
   <div class="msg" id="msg"></div>
 </form>
 

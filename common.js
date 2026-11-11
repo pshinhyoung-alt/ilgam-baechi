@@ -38,7 +38,7 @@ function fmtPhone(s) {
 function renderNav(current, me) {
   const nav = document.getElementById("nav");
   const links = [["admin.html", "홈"], ["requests.html", "인력의뢰"], ["workers.html", "구직자"], ["clients.html", "의뢰인"]];
-  if (me && me.role !== "branch_staff") links.push(["settings.html", "설정"]);
+  if (me && me.role !== "branch_staff") links.push(["settlement.html", "정산"], ["settings.html", "설정"]);
   for (const [href, label] of links) {
     const a = el("a", label);
     a.href = href;
