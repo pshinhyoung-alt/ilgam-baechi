@@ -6,7 +6,7 @@
   const canWage = !!me.can_edit_wage;
   const STATUS = { received: "접수", assigning: "배치중", confirmed: "확정", in_progress: "진행중", done: "완료", hold: "보류" };
 
-  let jobTypes = [], branches = [], clients = [], rows = [], editing = null, wageTouched = false, syncWage = true, counts = {};
+  let jobTypes = [], branches = [], clients = [], rows = [], editing = null, wageTouched = false, syncWage = true, counts = {}, convertFrom = null;
   let settings = { min_hourly_wage: 0, default_radius_m: 300, default_fee_rate: 10, max_fee_rate: null, income_tax_rate: 3, local_tax_rate: 10 };
   const $ = (id) => document.getElementById(id);
 
@@ -307,6 +307,7 @@
   }
 
   function openForm(r) {
+    convertFrom = null;   // 접수함에서 넘어온 경우는 열고 난 뒤에 따로 표시
     editing = r || null;
     wageTouched = false;
     // 확정 단가가 제시 일당과 같은 상태였다면, 제시 일당을 바꿀 때 확정 단가도 함께 바뀜
@@ -492,16 +493,70 @@
     }
 
     $("save").disabled = true;
-    const { error } = await (editing ? db.from("job_requests").update(payload).eq("id", editing.id) : db.from("job_requests").insert(payload));
+    let newId = null;
+    let error;
+    if (editing) {
+      ({ error } = await db.from("job_requests").update(payload).eq("id", editing.id));
+    } else {
+      const res = await db.from("job_requests").insert(payload).select("id").single();
+      error = res.error;
+      if (!error) newId = res.data.id;
+    }
     $("save").disabled = false;
     if (error) {
       $("err").textContent = /[가-힣]/.test(error.message) ? error.message : "저장하지 못했습니다. 입력 내용을 확인해 주세요.";
       return;
     }
     $("dlg").close();
+    // 접수함에서 시작한 경우: 접수를 '전환완료'로 표시
+    if (convertFrom && newId) {
+      await db.rpc("mark_inquiry_converted", { p_inquiry: convertFrom.id, p_client: payload.client_id, p_request: newId, p_worker: null });
+      convertFrom = null;
+    }
     await load();
   });
 
+  // 접수함에서 [인력의뢰 만들기]로 넘어온 경우: 의뢰인을 찾거나 만들고, 입력 창을 접수 내용으로 미리 채움
+  async function startFromInquiry(id) {
+    history.replaceState(null, "", "requests.html");
+    const { data: q } = await db.from("inquiries").select("*").eq("id", id).maybeSingle();
+    if (!q || q.type !== "인력요청") { alert("접수를 찾을 수 없거나 인력 요청 접수가 아닙니다."); return; }
+    if (q.status === "전환완료" && !confirm("이미 전환된 접수입니다. 그래도 새 인력의뢰를 만들까요?")) return;
+
+    // 같은 연락처의 의뢰인이 있으면 쓰고, 없으면 새로 만듦
+    let clientId;
+    const found = await db.from("clients").select("id,name,branch_id,deleted_at")
+      .eq("branch_id", q.branch_id).eq("phone", q.phone_digits).is("deleted_at", null).limit(1);
+    if (found.data && found.data.length) {
+      clientId = found.data[0].id;
+    } else {
+      const made = await db.from("clients").insert({
+        branch_id: q.branch_id, name: q.name || "홈페이지 접수", phone: q.phone_digits,
+        address: q.location || null, memo: "홈페이지 접수 " + q.receipt_no,
+      }).select("id,name,branch_id,deleted_at").single();
+      if (made.error) { alert("의뢰인을 만들지 못했습니다. 연락처를 확인해 주세요."); return; }
+      clientId = made.data.id;
+      clients.push(made.data);
+    }
+
+    openForm(null);
+    convertFrom = q;
+    if (isHq) $("branch").value = q.branch_id;
+    fillClients(q.branch_id);
+    $("client").value = clientId;
+    $("dlgTitle").textContent = "인력의뢰 접수 (홈페이지 접수 " + q.receipt_no + ")";
+    $("date").value = /^\d{4}-\d{2}-\d{2}$/.test(q.schedule || "") ? q.schedule : "";
+    $("address").value = q.location || "";
+    const n = parseInt(q.headcount, 10);
+    $("headcount").value = n >= 1 ? n : 1;
+    const ids = jobIdsFromText(q.field, jobTypes.filter((j) => j.active));
+    $("job").value = ids[0] || "";
+    $("req").value = [q.period && "근무 기간: " + q.period, q.details].filter(Boolean).join("\n").slice(0, 500);
+    $("err").textContent = "접수 내용으로 미리 채웠습니다. 작업 시간과 일당을 입력하고 저장하세요.";
+  }
+
   await loadBase();
   await load();
+  const inqId = new URLSearchParams(location.search).get("inq");
+  if (inqId) await startFromInquiry(inqId);
 })();

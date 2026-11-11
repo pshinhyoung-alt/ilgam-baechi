@@ -37,7 +37,7 @@ function fmtPhone(s) {
 
 function renderNav(current, me) {
   const nav = document.getElementById("nav");
-  const links = [["admin.html", "홈"], ["requests.html", "인력의뢰"], ["workers.html", "구직자"], ["clients.html", "의뢰인"]];
+  const links = [["admin.html", "홈"], ["inquiries.html", "접수함"], ["requests.html", "인력의뢰"], ["workers.html", "구직자"], ["clients.html", "의뢰인"]];
   if (me && me.role !== "branch_staff") links.push(["settlement.html", "정산"], ["settings.html", "설정"]);
   for (const [href, label] of links) {
     const a = el("a", label);
@@ -64,5 +64,27 @@ async function requireStaff(current) {
     return null;
   }
   renderNav(current, me);
+  // 접수함 메뉴에 '신규' 접수 건수를 작게 표시 (접수 기능이 아직 없으면 조용히 건너뜀)
+  db.from("inquiries").select("id", { count: "exact", head: true }).eq("status", "신규").then(({ count, error }) => {
+    if (error || !count) return;
+    const a = document.querySelector('#nav a[href="inquiries.html"]');
+    if (a) a.append(el("span", count > 99 ? "99+" : String(count), "badge"));
+  });
   return me;
+}
+
+// 홈페이지 접수의 분야 문구 → 직종 id 목록 (직종 '이름'으로 연결: 집수리·건설·청소·폐기물·농업·간병·돌봄·요양보호사)
+function jobIdsFromText(text, jobTypes) {
+  const t = String(text || "").replace(/생활\s*돌봄\s*\(?\s*집수리\s*\)?/g, "집수리");
+  const rules = [
+    [/집수리/, "집수리"], [/건설/, "건설"], [/청소/, "청소"], [/폐기물/, "폐기물"], [/농업/, "농업"],
+    [/간병|돌봄|요양/, "간병·돌봄"], [/요양보호사/, "요양보호사"],
+  ];
+  const ids = [];
+  for (const [re, name] of rules) {
+    if (!re.test(t)) continue;
+    const j = jobTypes.find((x) => x.name === name);
+    if (j && !ids.includes(j.id)) ids.push(j.id);
+  }
+  return ids;
 }

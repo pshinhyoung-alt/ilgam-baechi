@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>일잡코리아 인력배치 - 접수함</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<header class="top"><h1>접수함</h1><nav id="nav"></nav></header>
+<main>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="접수번호·이름·연락처 검색">
+    <select id="typeSel">
+      <option value="">전체 유형</option>
+      <option value="인력요청">인력 요청(구인)</option>
+      <option value="구직">구직</option>
+      <option value="기타문의">기타 문의</option>
+    </select>
+    <select id="statusSel">
+      <option value="open">처리 필요 (신규·연락완료·보류)</option>
+      <option value="신규">신규</option>
+      <option value="연락완료">연락완료</option>
+      <option value="보류">보류</option>
+      <option value="전환완료">전환완료</option>
+      <option value="종료">종료</option>
+      <option value="">전체</option>
+    </select>
+  </div>
+  <div class="card">
+    <div class="scroll">
+      <table>
+        <thead><tr><th>접수</th><th>유형</th><th>이름</th><th>연락처</th><th>내용</th><th>경로</th><th>상태</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="muted" id="empty"></div>
+  </div>
+  <div class="muted" id="purgeBox" hidden style="margin-top:8px">
+    개인정보 보관 기간: 전환완료·종료된 접수는 1년이 지나면 정리할 수 있습니다.
+    <button id="purge" style="margin-left:6px">보관 기간 지난 접수 정리</button>
+  </div>
+</main>
+
+<dialog id="idlg" style="width:min(620px,94vw)">
+  <h2 id="iTitle">접수 내용</h2>
+  <div class="muted" id="iSub"></div>
+  <dl id="iBody" style="margin:12px 0 0"></dl>
+  <label class="f" for="iMemo">직원 메모</label>
+  <textarea id="iMemo" rows="2" maxlength="500"></textarea>
+  <div class="msg" id="iErr"></div>
+  <div class="acts" id="iActions" style="margin-top:10px"></div>
+  <div class="formbtns">
+    <button type="button" id="iSaveMemo">메모 저장</button>
+    <button type="button" id="iClose">닫기</button>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script src="inquiries.js"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@
   const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
   const DOC_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
-  let jobTypes = [], branches = [], rows = [], editing = null;
+  let jobTypes = [], branches = [], rows = [], editing = null, convertFrom = null;
   let docs = {};          // 구직자 id -> { id_card: 서류정보, bankbook: 서류정보 }
   let hints = {};         // 구직자 id -> "농협 ****1234"
   let privateReady = true; // 서류·계좌 기능(SQL 10)이 준비되었는지
@@ -334,6 +334,7 @@
   }
 
   function openForm(r) {
+    convertFrom = null;   // 접수함에서 넘어온 경우는 열고 난 뒤에 따로 표시
     editing = r || null;
     $("dlgTitle").textContent = r ? "구직자 수정" : "구직자 등록";
     $("name").value = r ? r.name : "";
@@ -414,6 +415,11 @@
     }
     // 이후 오류가 나도 다시 눌렀을 때 중복 등록되지 않도록 수정 상태로 전환
     editing = { ...(editing || {}), ...payload, ...saved };
+    // 접수함에서 시작한 경우: 구직자가 만들어졌으니 접수를 '전환완료'로 표시
+    if (convertFrom) {
+      await db.rpc("mark_inquiry_converted", { p_inquiry: convertFrom.id, p_client: null, p_request: null, p_worker: saved.id });
+      convertFrom = null;
+    }
 
     // 2) 계좌, 3) 서류
     const problems = [];
@@ -438,6 +444,42 @@
     $("dlg").close();
   });
 
+  // 접수함에서 [구직자로 등록]으로 넘어온 경우: 입력 창을 접수 내용으로 미리 채움
+  async function startFromInquiry(id) {
+    history.replaceState(null, "", "workers.html");
+    const { data: q } = await db.from("inquiries").select("*").eq("id", id).maybeSingle();
+    if (!q || q.type !== "구직") { alert("접수를 찾을 수 없거나 구직 접수가 아닙니다."); return; }
+    if (q.status === "전환완료" && !confirm("이미 전환된 접수입니다. 그래도 새 구직자로 등록할까요?")) return;
+
+    openForm(null);
+    convertFrom = q;
+    if (isHq) $("branch").value = q.branch_id;
+    $("dlgTitle").textContent = "구직자 등록 (홈페이지 접수 " + q.receipt_no + ")";
+    $("name").value = q.name || "";
+    $("phone").value = fmtPhone(q.phone_digits);
+    $("area").value = q.location || "";
+    for (const jid of jobIdsFromText(q.field, jobTypes)) {
+      const cb = $("jobs").querySelector('input[value="' + jid + '"]');
+      if (cb) cb.checked = true;
+    }
+    // 홈페이지 양식에 있지만 이 프로그램에 칸이 없는 내용은 메모에 남김
+    $("memo").value = [
+      "홈페이지 접수 " + q.receipt_no,
+      q.nationality && "구분: " + q.nationality,
+      q.age_group && "연령대: " + q.age_group,
+      q.work_type && "희망 형태: " + q.work_type,
+      q.call_time && "연락 가능: " + q.call_time,
+      q.details && "경력·자격: " + q.details,
+    ].filter(Boolean).join(" / ").slice(0, 500);
+    // 홈페이지 동의는 '성함·연락처·희망 조건' 수집에 대한 것이라서, 신분증·계좌 동의는 따로 받아야 함 → 체크하지 않음
+    $("consent").checked = false;
+    updateQualVisibility();
+    updateTrainVisibility();
+    $("err").textContent = "접수 내용으로 미리 채웠습니다. 방문해서 신분증·계좌와 동의를 받은 뒤 해당 칸을 체크하세요.";
+  }
+
   await loadBase();
   await load();
+  const inqId = new URLSearchParams(location.search).get("inq");
+  if (inqId) await startFromInquiry(inqId);
 })();

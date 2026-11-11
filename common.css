@@ -156,3 +156,10 @@ dialog .checks select { width: auto; }
   main { padding: 0 12px 40px; margin-top: 16px; }
   .card { padding: 16px; border-radius: 14px; }
 }
+
+/* 메뉴의 신규 건수 표시 */
+.badge {
+  display: inline-block; margin-left: 6px; min-width: 18px; padding: 1px 6px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 11px; font-weight: 700; text-align: center; line-height: 1.5;
+}
