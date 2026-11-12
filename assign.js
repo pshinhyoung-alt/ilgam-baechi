@@ -153,7 +153,16 @@ const AssignUI = (() => {
       if (a.checked_in_at) stTd.append(el("div", "출근 " + clock(a.checked_in_at) + (a.checked_out_at ? " · 퇴근 " + clock(a.checked_out_at) : ""), "muted"));
       if (a.complete_note) stTd.append(el("div", "보고: " + a.complete_note, "muted"));
       const rt = ratingOf[a.id];
-      if (rt) stTd.append(el("div", (rt.source === "admin" ? "관리자 평가 " : "의뢰인 평가 ") + "★".repeat(rt.rating) + "☆".repeat(5 - rt.rating) + (rt.comment ? " · " + rt.comment : ""), "muted"));
+      if (rt) {
+        const line = el("div", (rt.source === "admin" ? "관리자 평가 " : "의뢰인 평가 "), "muted");
+        const on = el("span", "★".repeat(rt.rating));
+        on.style.color = "#e5232b";
+        const off = el("span", "★".repeat(5 - rt.rating));
+        off.style.color = "#d5dbe7";
+        line.append(on, off);
+        if (rt.comment) line.append(document.createTextNode(" · " + rt.comment));
+        stTd.append(line);
+      }
       if (req.fee_enabled || req.tax_enabled) {
         // 소개수수료 → 그 금액을 뺀 기준액으로 원천징수 3.3% → 지급 예정액
         const rate = a.fee_override_rate != null ? Number(a.fee_override_rate) : Number(req.fee_rate);

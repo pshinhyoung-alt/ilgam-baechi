@@ -26,7 +26,15 @@
   };
   const message = (box, kind, text) => { box.className = "msg " + kind; box.textContent = text; };
   const errText = (e, fallback) => (e && /[가-힣]/.test(e.message) ? e.message : fallback);
-  const starText = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+  // 채워진 별은 빨강, 빈 별은 연한 회색
+  function starLine(n, comment) {
+    const line = el("div", undefined, "muted");
+    const on = el("span", "★".repeat(n), "star-on");
+    const off = el("span", "★".repeat(5 - n), "star-off");
+    line.append(on, off);
+    if (comment) line.append(document.createTextNode("  " + comment));
+    return line;
+  }
 
   function showFatal(text) { app.replaceChildren(el("div", text, "card")); }
 
@@ -74,7 +82,7 @@
       row.append(head);
       if (w.checked_in_at) row.append(el("div", "출근 " + clock(w.checked_in_at) + (w.checked_out_at ? " · 퇴근 " + clock(w.checked_out_at) : ""), "muted"));
       if (done && w.rating) {
-        row.append(el("div", starText(w.rating) + (w.comment ? "  " + w.comment : ""), "muted"));
+        row.append(starLine(w.rating, w.comment));
       } else if (!done && rateable.includes(w)) {
         const stars = el("div", undefined, "stars");
         for (let i = 1; i <= 5; i++) {
