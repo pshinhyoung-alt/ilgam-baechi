@@ -4,12 +4,28 @@
   const isAdmin = me.role !== "branch_staff";
   const isHq = me.role === "hq_admin";
 
-  let branches = [], rows = [], editing = null;
+  let branches = [], rows = [], shown = [], editing = null;
   const $ = (id) => document.getElementById(id);
 
   const views = [["active", "사용 중"]];
   if (isAdmin) views.push(["trash", "휴지통"]);
   for (const [v, label] of views) $("view").append(new Option(label, v));
+
+  // 머리글을 눌러 정렬: 이름/업체명, 전화, 주소, 메모
+  const sorter = setupSort(document.querySelector("main table"), [
+    (r) => r.name, (r) => digits(r.phone), (r) => r.address || "", (r) => r.memo || "", null,
+  ], () => render());
+
+  // 지금 화면에 보이는 목록(검색·보기 적용)을 엑셀로 / 인쇄·PDF로
+  $("xlsx").addEventListener("click", () => {
+    if (!shown.length) { alert("내려받을 의뢰인이 없습니다."); return; }
+    saveXlsx("의뢰인", "의뢰인", ["이름/업체명", "전화", "주소", "메모"],
+      shown.map((r) => [r.name, fmtPhone(r.phone), r.address || "", r.memo || ""]));
+  });
+  $("print").addEventListener("click", () => {
+    const q = $("q").value.trim();
+    printPage("의뢰인 목록 - " + $("view").selectedOptions[0].text + (q ? " (검색: " + q + ")" : ""));
+  });
 
   async function loadBase() {
     if (!isHq) return;
@@ -30,11 +46,12 @@
     const q = $("q").value.trim().toLowerCase();
     const qd = digits(q);
     const trash = $("view").value === "trash";
-    const list = rows.filter((r) => {
+    const list = sorter(rows.filter((r) => {
       if (trash !== !!r.deleted_at) return false;
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
-    });
+    }));
+    shown = list;
     const tbody = $("rows");
     tbody.replaceChildren();
     $("empty").textContent = list.length ? "" : "표시할 의뢰인이 없습니다.";

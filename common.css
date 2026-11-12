@@ -157,6 +157,24 @@ dialog .checks select { width: auto; }
   .card { padding: 16px; border-radius: 14px; }
 }
 
+/* ───── 인쇄 / PDF ───── */
+.print-head { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  body { background: #fff; font-size: 12px; }
+  header.top, .toolbar, .noprint, dialog, button, nav { display: none !important; }
+  main { max-width: none; margin: 0; padding: 0; }
+  .print-head { display: block; font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .card { box-shadow: none; border: 0; padding: 0; margin-bottom: 14px; break-inside: auto; }
+  .scroll { overflow: visible; }
+  table { font-size: 11px; }
+  th { background: #eee; color: #000; }
+  th, td { padding: 5px 7px; }
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+  table.has-act th:last-child, table.has-act td:last-child { display: none; }
+}
+
 /* 메뉴의 신규 건수 표시 */
 .badge {
   display: inline-block; margin-left: 6px; min-width: 18px; padding: 1px 6px;

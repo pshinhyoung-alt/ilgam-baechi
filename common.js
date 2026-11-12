@@ -38,6 +38,53 @@ function saveXlsx(fileBase, sheetName, head, body) {
   XLSX.writeFile(wb, fileBase + "_" + ymd + ".xlsx");
 }
 
+// 표 머리글(th)을 눌러 정렬. cols: th 순서대로 정렬값을 돌려주는 함수 (정렬 안 할 칸은 null)
+// 돌려받은 함수에 목록을 넣으면 정렬된 새 목록이 나옴. 한 번 더 누르면 반대 방향
+function setupSort(table, cols, rerender) {
+  const ths = [...table.querySelectorAll("thead th")];
+  const st = { i: -1, dir: 1 };
+  const mark = () => ths.forEach((th, i) => { if (cols[i]) th.textContent = th.dataset.label + (i === st.i ? (st.dir > 0 ? " ▲" : " ▼") : ""); });
+  ths.forEach((th, i) => {
+    if (!cols[i]) return;
+    th.dataset.label = th.textContent;
+    th.style.cursor = "pointer";
+    th.title = "눌러서 정렬";
+    th.addEventListener("click", () => { st.dir = st.i === i ? -st.dir : 1; st.i = i; mark(); rerender(); });
+  });
+  const cmp = (a, b) => {
+    if (a == null || a === "") return b == null || b === "" ? 0 : 1;   // 빈 값은 항상 뒤로
+    if (b == null || b === "") return -1;
+    return typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "ko", { numeric: true });
+  };
+  return (list) => {
+    if (st.i < 0) return list;
+    const f = cols[st.i];
+    return [...list].sort((x, y) => {
+      const a = f(x), b = f(y);
+      const blank = (v) => v == null || v === "";
+      return blank(a) || blank(b) ? cmp(a, b) : cmp(a, b) * st.dir;
+    });
+  };
+}
+
+// 인쇄 / PDF 저장: 브라우저 인쇄 창을 엽니다 (프린터에서 'PDF로 저장'을 고르면 PDF 파일)
+function printPage(title) {
+  const d = new Date();
+  const ymd = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  let h = document.getElementById("printHead");
+  if (!h) {
+    h = el("div", undefined, "print-head");
+    h.id = "printHead";
+    document.querySelector("main").prepend(h);
+  }
+  h.textContent = title + "  (출력일 " + ymd + ")";
+  const old = document.title;
+  document.title = title + "_" + ymd;   // PDF 파일 이름이 됨
+  const restore = () => { document.title = old; window.removeEventListener("afterprint", restore); };
+  window.addEventListener("afterprint", restore);
+  window.print();
+}
+
 function digits(s) { return (s || "").replace(/\D/g, ""); }
 
 function fmtPhone(s) {

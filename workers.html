@@ -14,11 +14,12 @@
     <input type="search" id="q" placeholder="이름·전화번호 검색">
     <select id="view"></select>
     <button id="xlsx">엑셀 내려받기</button>
+    <button id="print">인쇄 / PDF</button>
     <button class="primary" id="add">+ 구직자 등록</button>
   </div>
   <div class="card">
     <div class="scroll">
-      <table>
+      <table class="has-act">
         <thead><tr><th>이름</th><th>전화</th><th>직종</th><th>가능 지역</th><th>가능 요일</th><th>상태</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>

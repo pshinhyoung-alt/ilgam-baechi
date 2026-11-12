@@ -17,6 +17,18 @@
   if (isAdmin) views.push(["trash", "휴지통"]);
   for (const [v, label] of views) $("view").append(new Option(label, v));
 
+  // 머리글을 눌러 정렬: 이름, 전화, 직종, 가능 지역, 가능 요일(많은 순), 상태
+  const jobLabel = (r) => r.job_type_ids.map((id) => (jobTypes.find((j) => j.id === id) || {}).name || "").join(",");
+  const sorter = setupSort(document.querySelector("main table"), [
+    (r) => r.name, (r) => digits(r.phone), jobLabel, (r) => r.area || "", (r) => r.available_days.length,
+    (r) => (r.deleted_at ? "휴지통" : r.status === "paused" ? "활동 중지" : "활동 중"), null,
+  ], () => render());
+
+  $("print").addEventListener("click", () => {
+    const q = $("q").value.trim();
+    printPage("구직자 목록 - " + $("view").selectedOptions[0].text + (q ? " (검색: " + q + ")" : ""));
+  });
+
   async function loadBase() {
     const [jt, br] = await Promise.all([
       db.from("job_types").select("*").eq("active", true).order("sort_order"),
@@ -67,14 +79,14 @@
     const qd = digits(q);
     const view = $("view").value;
     const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
-    const list = rows.filter((r) => {
+    const list = sorter(rows.filter((r) => {
       const trashed = !!r.deleted_at;
       if (view === "trash" ? !trashed : trashed) return false;
       if (view === "active" && r.status !== "active") return false;
       if (view === "paused" && r.status !== "paused") return false;
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
-    });
+    }));
 
     shown = list;
     const tbody = $("rows");

@@ -14,11 +14,12 @@
     <input type="search" id="q" placeholder="의뢰인·현장 주소 검색">
     <select id="view"></select>
     <button id="xlsx">엑셀 내려받기</button>
+    <button id="print">인쇄 / PDF</button>
     <button class="primary" id="add">+ 인력의뢰 접수</button>
   </div>
   <div class="card">
     <div class="scroll">
-      <table>
+      <table class="has-act">
         <thead><tr><th>작업 일시</th><th>의뢰인</th><th>직종</th><th>배치/필요</th><th>현장</th><th>제시 단가</th><th>확정 단가</th><th>출근 반경</th><th>상태</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>

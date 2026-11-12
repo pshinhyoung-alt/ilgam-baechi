@@ -13,8 +13,26 @@
   const pad = (n) => String(n).padStart(2, "0");
   const iso = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 
-  let rows = [];
+  let allRows = [];   // 조회한 전체
+  let rows = [];      // 구직자를 골랐으면 그 사람 것만
   let lastQuery = null;
+
+  // 구직자 고르기 (개인별 정산). 이미 골랐던 사람이 새 조회에도 있으면 그대로 유지
+  function fillWorkerSel() {
+    const keep = $("workerSel").value;
+    const map = new Map();
+    for (const r of allRows) if (!map.has(r.worker_id)) map.set(r.worker_id, r);
+    const list = [...map.values()].sort((a, b) => a.worker_name.localeCompare(b.worker_name, "ko"));
+    $("workerSel").replaceChildren(new Option("전체 구직자", ""));
+    for (const r of list) $("workerSel").append(new Option(r.worker_name + " (" + digits(r.worker_phone).slice(-4) + ")", r.worker_id));
+    $("workerSel").value = map.has(keep) ? keep : "";
+  }
+  const pickedWorker = () => $("workerSel").value;
+  function applyWorker() {
+    const w = pickedWorker();
+    rows = w ? allRows.filter((r) => r.worker_id === w) : allRows;
+  }
+  $("workerSel").addEventListener("change", () => { applyWorker(); render(); });
 
   // ───────── 기간 고르기 ─────────
   function preset(name) {
@@ -112,7 +130,8 @@
     for (const r of data) {
       const tr = document.createElement("tr");
       for (const c of cols) {
-        const td = el("td", String(c.f(r)));
+        const td = c.node ? el("td") : el("td", String(c.f(r)));
+        if (c.node) td.append(c.node(r));
         if (c.num) { td.style.textAlign = "right"; td.style.whiteSpace = "nowrap"; }
         tr.append(td);
       }
@@ -147,9 +166,32 @@
     for (const r of rows) { add(total, r); people.add(r.worker_id); }
 
     $("totalCard").hidden = $("sumCard").hidden = $("payCard").hidden = $("billCard").hidden = $("detailCard").hidden = rows.length === 0;
-    $("branchCard").hidden = !isHq || rows.length === 0;
+    $("branchCard").hidden = !isHq || rows.length === 0 || !!pickedWorker();
+    $("workerCard").hidden = rows.length === 0 || !!pickedWorker();
+    $("print").disabled = rows.length === 0;
     if (!rows.length) { $("status").textContent = "해당 기간에 정산할 건이 없습니다."; return; }
     $("status").textContent = rows.length + "건 · " + people.size + "명";
+    $("totalTitle").textContent = pickedWorker() ? rows[0].worker_name + " 님 정산 합계" : "조회 기간 합계";
+
+    // 구직자 개인별 합계 (조회 기간 전체)
+    if (!pickedWorker()) {
+      const byWorker = new Map();
+      for (const r of rows) {
+        if (!byWorker.has(r.worker_id)) byWorker.set(r.worker_id, { id: r.worker_id, name: r.worker_name, phone: r.worker_phone, ...ZERO() });
+        add(byWorker.get(r.worker_id), r);
+      }
+      drawTable($("workerTable"), [
+        { h: "구직자", f: (r) => r.name },
+        { h: "연락처", f: (r) => fmtPhone(r.phone) },
+        ...moneyCols,
+        { h: "", node: (r) => {
+          const b = el("button", "개인 정산서");
+          b.type = "button";
+          b.addEventListener("click", () => { $("workerSel").value = r.id; applyWorker(); render(); window.scrollTo(0, 0); });
+          return b;
+        } },
+      ], [...byWorker.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")), total);
+    }
 
     const box = $("totals");
     box.replaceChildren();
@@ -207,9 +249,9 @@
       drawTable($("branchTable"), [{ h: "지점", f: (r) => r.name }, ...moneyCols], [...map.values()], total);
     }
 
-    // 상세 내역 (화면에는 앞 200건만)
-    const shown = rows.slice(0, 200);
-    $("detailNote").textContent = rows.length > 200 ? "앞 200건만 보입니다. 전체는 엑셀 파일에 들어 있습니다." : "";
+    // 상세 내역 (화면에는 앞 500건만)
+    const shown = rows.slice(0, 500);
+    $("detailNote").textContent = rows.length > 500 ? "앞 500건만 보입니다. 전체는 엑셀 파일에 들어 있습니다." : "";
     drawTable($("detailTable"), [
       { h: "일자", f: (r) => r.work_date },
       { h: "구직자", f: (r) => r.worker_name },
@@ -232,19 +274,29 @@
     $("run").disabled = true;
     $("status").textContent = "불러오는 중...";
     try {
-      rows = await fetchRows(false);
+      allRows = await fetchRows(false);
+      fillWorkerSel();
+      applyWorker();
       $("xlsx").disabled = false;
       render();
     } catch (e) {
-      rows = [];
+      allRows = rows = [];
       $("xlsx").disabled = true;
-      $("totalCard").hidden = $("sumCard").hidden = $("payCard").hidden = $("billCard").hidden = $("branchCard").hidden = $("detailCard").hidden = true;
+      $("print").disabled = true;
+      $("totalCard").hidden = $("sumCard").hidden = $("payCard").hidden = $("billCard").hidden = $("branchCard").hidden = $("workerCard").hidden = $("detailCard").hidden = true;
       $("status").textContent = "";
       $("err").textContent = /[가-힣]/.test(e.message || "") ? e.message : "정산 자료를 불러오지 못했습니다. (서버 SQL 18번이 적용되었는지 확인하세요)";
     }
     $("run").disabled = false;
   }
   $("run").addEventListener("click", run);
+
+  // ───────── 인쇄 / PDF ─────────
+  $("print").addEventListener("click", () => {
+    if (!rows.length) return;
+    const who = pickedWorker() ? " - " + rows[0].worker_name + " 님" : "";
+    printPage("정산서 " + lastQuery.from + " ~ " + lastQuery.to + " (" + UNIT[lastQuery.unit] + ")" + who);
+  });
 
   // ───────── 엑셀 ─────────
   $("xlsx").addEventListener("click", async () => {
@@ -254,7 +306,9 @@
     $("err").textContent = "";
     try {
       await db.rpc("log_settlement_export", { p_from: lastQuery.from, p_to: lastQuery.to, p_with_bank: true });
-      const full = await fetchRows(true);
+      let full = await fetchRows(true);
+      const pw = pickedWorker();
+      if (pw) full = full.filter((r) => r.worker_id === pw);
       const unit = lastQuery.unit;
       const total = ZERO();
       for (const r of full) add(total, r);
@@ -312,7 +366,7 @@
         "원천징수 적용": r.tax_applied ? "적용" : "미적용", "소득세": r.tax_income, "지방소득세": r.tax_local, "구직자 지급액": r.net,
       })), [12, 16, 12, 15, 12, 18, 18, 14, 12, 12, 12, 10, 12, 14]);
 
-      XLSX.writeFile(wb, "정산_" + UNIT[unit] + "_" + lastQuery.from + "_" + lastQuery.to + ".xlsx");
+      XLSX.writeFile(wb, "정산_" + (pw && full.length ? full[0].worker_name + "_" : "") + UNIT[unit] + "_" + lastQuery.from + "_" + lastQuery.to + ".xlsx");
     } catch (e) {
       $("err").textContent = /[가-힣]/.test(e.message || "") ? e.message : "엑셀 파일을 만들지 못했습니다.";
     }

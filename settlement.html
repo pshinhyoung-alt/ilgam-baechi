@@ -10,7 +10,7 @@
 <body>
 <header class="top"><h1>정산</h1><nav id="nav"></nav></header>
 <main>
-  <div class="card">
+  <div class="card noprint">
     <div class="toolbar" style="margin-bottom:8px">
       <select id="unit">
         <option value="day">일별</option>
@@ -20,6 +20,7 @@
       </select>
       <input type="date" id="from"> <span style="align-self:center">~</span> <input type="date" id="to">
       <select id="branchSel" hidden></select>
+      <select id="workerSel" title="구직자 개인별 정산"><option value="">전체 구직자</option></select>
     </div>
     <div class="acts" style="margin-bottom:8px">
       <button type="button" data-p="today">오늘</button>
@@ -35,14 +36,21 @@
     <div class="acts" style="margin-top:10px;align-items:center">
       <button class="primary" id="run">조회</button>
       <button id="xlsx" disabled>엑셀 내려받기</button>
+      <button id="print" disabled>인쇄 / PDF</button>
       <span class="muted" id="status"></span>
     </div>
     <div class="msg" id="err" style="margin-top:8px"></div>
   </div>
 
   <div class="card" id="totalCard" hidden>
-    <h2 style="font-size:16px;margin:0 0 8px">조회 기간 합계</h2>
+    <h2 style="font-size:16px;margin:0 0 8px" id="totalTitle">조회 기간 합계</h2>
     <div id="totals"></div>
+  </div>
+
+  <div class="card" id="workerCard" hidden>
+    <h2 style="font-size:16px;margin:0 0 4px">구직자 개인별 정산</h2>
+    <div class="muted noprint" style="margin-bottom:6px">조회 기간 전체를 구직자별로 합한 금액입니다. [개인 정산서]를 누르면 그 구직자 한 명의 내역만 보이고, 인쇄·PDF·엑셀도 그 사람 것만 나옵니다.</div>
+    <div class="scroll"><table id="workerTable" class="has-act"></table></div>
   </div>
 
   <div class="card" id="sumCard" hidden>

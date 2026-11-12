@@ -58,6 +58,19 @@
       : "";
   }
 
+  // 머리글을 눌러 정렬: 작업 일시, 의뢰인, 직종, 필요 인원, 현장, 제시 단가, 확정 단가, 출근 반경, 상태
+  const nameMaps = { client: {}, job: {} };
+  const sorter = setupSort(document.querySelector("main table"), [
+    (r) => r.work_date + " " + r.start_time, (r) => nameMaps.client[r.client_id] || "", (r) => nameMaps.job[r.job_type_id] || "",
+    (r) => r.headcount, (r) => r.address, (r) => r.offered_wage, (r) => r.wage, (r) => r.radius_m,
+    (r) => (r.deleted_at ? "휴지통" : STATUS[r.status]), null,
+  ], () => render());
+
+  $("print").addEventListener("click", () => {
+    const q = $("q").value.trim();
+    printPage("인력의뢰 목록 - " + $("view").selectedOptions[0].text + (q ? " (검색: " + q + ")" : ""));
+  });
+
   async function loadBase() {
     const [jt, br, cl, st] = await Promise.all([
       db.from("job_types").select("*").order("sort_order"),
@@ -90,16 +103,16 @@
   function render() {
     const q = $("q").value.trim().toLowerCase();
     const view = $("view").value;
-    const clientName = Object.fromEntries(clients.map((c) => [c.id, c.name]));
-    const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
-    const list = rows.filter((r) => {
+    const clientName = nameMaps.client = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+    const jobName = nameMaps.job = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
+    const list = sorter(rows.filter((r) => {
       if (view === "trash" ? !r.deleted_at : r.deleted_at) return false;
       if (view === "open" && ["done", "hold"].includes(r.status)) return false;
       if (view === "hold" && r.status !== "hold") return false;
       if (view === "done" && r.status !== "done") return false;
       if (!q) return true;
       return (clientName[r.client_id] || "").toLowerCase().includes(q) || r.address.toLowerCase().includes(q);
-    });
+    }));
 
     shown = list;
     const tbody = $("rows");
