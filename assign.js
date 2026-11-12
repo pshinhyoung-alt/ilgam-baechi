@@ -86,7 +86,7 @@ const AssignUI = (() => {
         .select("worker_id,job_requests!inner(client_id)")
         .in("status", ["checked_out", "completed"])
         .eq("job_requests.client_id", req.client_id),
-      db.from("assignment_ratings").select("assignment_id,request_id,worker_id,rating,comment")
+      db.from("assignment_ratings").select("*")
         .order("rated_at", { ascending: false }).limit(1000),
     ]);
     if (!rq.data) { $("adlg").close(); ctx.onChange(); return; }
@@ -153,7 +153,7 @@ const AssignUI = (() => {
       if (a.checked_in_at) stTd.append(el("div", "출근 " + clock(a.checked_in_at) + (a.checked_out_at ? " · 퇴근 " + clock(a.checked_out_at) : ""), "muted"));
       if (a.complete_note) stTd.append(el("div", "보고: " + a.complete_note, "muted"));
       const rt = ratingOf[a.id];
-      if (rt) stTd.append(el("div", "의뢰인 평가 " + "★".repeat(rt.rating) + "☆".repeat(5 - rt.rating) + (rt.comment ? " · " + rt.comment : ""), "muted"));
+      if (rt) stTd.append(el("div", (rt.source === "admin" ? "관리자 평가 " : "의뢰인 평가 ") + "★".repeat(rt.rating) + "☆".repeat(5 - rt.rating) + (rt.comment ? " · " + rt.comment : ""), "muted"));
       if (req.fee_enabled || req.tax_enabled) {
         // 소개수수료 → 그 금액을 뺀 기준액으로 원천징수 3.3% → 지급 예정액
         const rate = a.fee_override_rate != null ? Number(a.fee_override_rate) : Number(req.fee_rate);
@@ -175,6 +175,9 @@ const AssignUI = (() => {
       acts.append(btn("링크 복사", "", () => copyLink(a, name)));
       if (req.fee_enabled && ctx.me.can_edit_wage) acts.append(btn("수수료 변경", "", () => changeFee(a, name)));
       if (req.tax_enabled && ctx.me.can_edit_wage) acts.append(btn(a.tax_exempt ? "원천징수 적용" : "원천징수 제외", "", () => toggleTax(a, name)));
+      if (ctx.me.role !== "branch_staff" && ["working", "checked_out", "completed"].includes(a.status)) {
+        acts.append(btn(rt ? "별점 수정" : "별점 입력", "", () => setRating(a, name, rt)));
+      }
       if (["assigned", "notified", "accepted"].includes(a.status)) {
         acts.append(btn("수동 출근", "", () => manual(a, "in", name)));
       }
@@ -335,6 +338,28 @@ const AssignUI = (() => {
     if (error) { fail(error, "바꾸지 못했습니다."); return; }
     $("aErr").textContent = "";
     $("aInfo").textContent = "";
+    await afterChange();
+  }
+
+  // 관리자가 별점 입력·수정. 비우면 평가를 삭제
+  async function setRating(a, name, cur) {
+    const input = prompt(name + " 님의 별점(1~5)을 입력하세요." + (cur ? "\n지금 별점: " + cur.rating + "점" : "") + (cur ? "\n(비우면 평가를 삭제합니다)" : ""), cur ? String(cur.rating) : "");
+    if (input === null) return;
+    let rating = null, comment = null;
+    if (input.trim() === "") {
+      if (!cur) return;
+      if (!confirm(name + " 님의 평가를 삭제합니다. 계속할까요?")) return;
+    } else {
+      rating = Number(input);
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) { fail({ message: "" }, "별점은 1~5 사이의 숫자로 입력해 주세요."); return; }
+      const c = prompt("한마디를 입력하세요. (선택, 비워도 됩니다)", cur && cur.comment ? cur.comment : "");
+      if (c === null) return;
+      comment = c.trim() || null;
+    }
+    const { error } = await db.rpc("admin_set_rating", { p_assignment: a.id, p_rating: rating, p_comment: comment });
+    if (error) { fail(error, "별점을 저장하지 못했습니다."); return; }
+    $("aErr").textContent = "";
+    $("aInfo").textContent = rating === null ? name + " 님의 평가를 삭제했습니다." : name + " 님의 별점을 " + rating + "점으로 저장했습니다.";
     await afterChange();
   }
 
