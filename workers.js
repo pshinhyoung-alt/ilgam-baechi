@@ -6,7 +6,7 @@
   const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
   const DOC_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
-  let jobTypes = [], branches = [], rows = [], editing = null, convertFrom = null;
+  let jobTypes = [], branches = [], rows = [], shown = [], editing = null, convertFrom = null;
   let docs = {};          // 구직자 id -> { id_card: 서류정보, bankbook: 서류정보 }
   let hints = {};         // 구직자 id -> "농협 ****1234"
   let privateReady = true; // 서류·계좌 기능(SQL 10)이 준비되었는지
@@ -76,6 +76,7 @@
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
     });
 
+    shown = list;
     const tbody = $("rows");
     tbody.replaceChildren();
     $("empty").textContent = list.length ? "" : "표시할 구직자가 없습니다.";
@@ -106,6 +107,20 @@
       tbody.append(tr);
     }
   }
+
+  // 지금 화면에 보이는 목록(검색·보기 적용)을 엑셀로. 계좌·서류 정보는 넣지 않음
+  $("xlsx").addEventListener("click", () => {
+    if (!shown.length) { alert("내려받을 구직자가 없습니다."); return; }
+    const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
+    saveXlsx("구직자", "구직자",
+      ["이름", "전화", "직종", "가능 지역", "가능 요일", "상태", "동의 확인", "자체교육 이수"],
+      shown.map((r) => [
+        r.name, fmtPhone(r.phone), r.job_type_ids.map((id) => jobName[id] || "(삭제된 직종)").join(", "), r.area || "",
+        DAYS.filter((d) => r.available_days.includes(d)).join(" "),
+        r.deleted_at ? "휴지통" : r.status === "paused" ? "활동 중지" : "활동 중",
+        r.consent_confirmed ? "확인" : "확인 필요", r.training_done ? "이수" : "",
+      ]));
+  });
 
   function btn(label, cls, fn) {
     const b = el("button", label, cls);

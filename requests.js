@@ -6,7 +6,7 @@
   const canWage = !!me.can_edit_wage;
   const STATUS = { received: "접수", assigning: "배치중", confirmed: "확정", in_progress: "진행중", done: "완료", hold: "보류" };
 
-  let jobTypes = [], branches = [], clients = [], rows = [], editing = null, wageTouched = false, syncWage = true, counts = {}, convertFrom = null;
+  let jobTypes = [], branches = [], clients = [], rows = [], shown = [], editing = null, wageTouched = false, syncWage = true, counts = {}, convertFrom = null;
   let settings = { min_hourly_wage: 0, default_radius_m: 300, default_fee_rate: 10, max_fee_rate: null, income_tax_rate: 3, local_tax_rate: 10 };
   const $ = (id) => document.getElementById(id);
 
@@ -101,6 +101,7 @@
       return (clientName[r.client_id] || "").toLowerCase().includes(q) || r.address.toLowerCase().includes(q);
     });
 
+    shown = list;
     const tbody = $("rows");
     tbody.replaceChildren();
     $("empty").textContent = list.length ? "" : "표시할 인력의뢰가 없습니다.";
@@ -129,6 +130,20 @@
       tbody.append(tr);
     }
   }
+
+  // 지금 화면에 보이는 목록(검색·보기 적용)을 엑셀로
+  $("xlsx").addEventListener("click", () => {
+    if (!shown.length) { alert("내려받을 인력의뢰가 없습니다."); return; }
+    const clientName = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+    const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
+    saveXlsx("인력의뢰", "인력의뢰",
+      ["작업일", "시작", "종료", "의뢰인", "직종", "필요 인원", "배치 인원", "현장 주소", "제시 단가", "확정 단가", "출근 반경(m)", "상태", "보류 사유"],
+      shown.map((r) => [
+        r.work_date, hhmm(r.start_time), hhmm(r.end_time), clientName[r.client_id] || "", jobName[r.job_type_id] || "(삭제된 직종)",
+        r.headcount, counts[r.id] || 0, r.address, r.offered_wage, r.wage, r.radius_m,
+        r.deleted_at ? "휴지통" : STATUS[r.status], r.status === "hold" ? r.hold_reason || "" : "",
+      ]));
+  });
 
   function btn(label, cls, fn) {
     const b = el("button", label, cls);

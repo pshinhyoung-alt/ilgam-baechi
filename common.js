@@ -26,6 +26,18 @@ function calcTax(base, s) {
 }
 
 
+// 표를 엑셀 파일로 저장. head: 제목 줄 배열, body: 줄마다 값 배열 (xlsx 라이브러리를 화면에서 먼저 불러와 둘 것)
+function saveXlsx(fileBase, sheetName, head, body) {
+  if (typeof XLSX === "undefined") { alert("엑셀 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요."); return; }
+  const ws = XLSX.utils.aoa_to_sheet([head, ...body]);
+  ws["!cols"] = head.map((h, i) => ({ wch: Math.min(40, Math.max(String(h).length * 2, ...body.map((r) => String(r[i] ?? "").length)) + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const d = new Date();
+  const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+  XLSX.writeFile(wb, fileBase + "_" + ymd + ".xlsx");
+}
+
 function digits(s) { return (s || "").replace(/\D/g, ""); }
 
 function fmtPhone(s) {
