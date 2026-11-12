@@ -8,6 +8,8 @@
 
   let jobTypes = [], branches = [], rows = [], shown = [], editing = null, convertFrom = null;
   let docs = {};          // 구직자 id -> { id_card: 서류정보, bankbook: 서류정보 }
+  let rating = {};        // 구직자 id -> { n: 평가 건수, sum: 별점 합 }
+  const avgOf = (r) => (rating[r.id] ? rating[r.id].sum / rating[r.id].n : 0);
   let hints = {};         // 구직자 id -> "농협 ****1234"
   let privateReady = true; // 서류·계좌 기능(SQL 10)이 준비되었는지
   const $ = (id) => document.getElementById(id);
@@ -80,6 +82,17 @@
     if (w.error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
     rows = w.data;
     privateReady = !d.error && !h.error;
+    // 구직자별 평균 별점 (의뢰인·관리자 평가 합산, 1000건씩 이어서). 불러오지 못해도 목록은 그대로 보여 줌
+    rating = {};
+    for (let off = 0; ; off += 1000) {
+      const { data: rs, error: e3 } = await db.from("assignment_ratings").select("worker_id,rating").range(off, off + 999);
+      if (e3) break;
+      for (const x of rs) {
+        const s = rating[x.worker_id] || (rating[x.worker_id] = { n: 0, sum: 0 });
+        s.n += 1; s.sum += x.rating;
+      }
+      if (rs.length < 1000) break;
+    }
     docs = {};
     for (const x of d.data || []) (docs[x.worker_id] = docs[x.worker_id] || {})[x.kind] = x;
     hints = {};
@@ -103,6 +116,8 @@
       if (dayf && !r.available_days.includes(dayf)) return false;
       if (flag === "consent" && r.consent_confirmed) return false;
       if (flag === "notrain" && (r.training_done || !r.job_type_ids.some((id) => reqTrain.has(id)))) return false;
+      if (flag === "lowstar" && !(rating[r.id] && avgOf(r) <= 3)) return false;
+      if (flag === "highstar" && !(rating[r.id] && avgOf(r) >= 4.5)) return false;
       if (flag === "foreign" && !r.is_foreign) return false;
       if (flag === "permit" && !(r.is_foreign && !r.work_permit_ok)) return false;
       if (flag === "visa") { const n = visaDaysLeft(r); if (n === null || n > 30) return false; }
@@ -120,6 +135,14 @@
       const tr = document.createElement("tr");
       const nameTd = el("td", r.name);
       if (!r.consent_confirmed) nameTd.append(el("div", "동의 확인 필요", "tag warn"));
+      if (rating[r.id]) {
+        const rl = el("div", undefined, "muted");
+        const star = el("span", "★");
+        star.style.color = "#e5232b";
+        rl.append(star, document.createTextNode(" " + avgOf(r).toFixed(1) + " (" + rating[r.id].n + "건)"));
+        rl.title = "의뢰인·관리자가 남긴 별점의 평균";
+        nameTd.append(rl);
+      }
       if (r.is_foreign) {
         const fx = el("div");
         fx.append(el("span", "외국인" + (r.nationality ? " · " + r.nationality : ""), "tag"));
@@ -160,7 +183,7 @@
     const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
     saveXlsx("구직자", "구직자",
       ["이름", "전화", "직종", "가능 지역", "가능 요일", "상태", "동의 확인", "자체교육 이수",
-        "구분", "국적", "체류자격", "체류 만료일", "TOPIK", "취업 가능 확인"],
+        "구분", "국적", "체류자격", "체류 만료일", "TOPIK", "취업 가능 확인", "평균 별점", "평가 건수"],
       shown.map((r) => [
         r.name, fmtPhone(r.phone), r.job_type_ids.map((id) => jobName[id] || "(삭제된 직종)").join(", "), r.area || "",
         DAYS.filter((d) => r.available_days.includes(d)).join(" "),
@@ -169,6 +192,7 @@
         r.is_foreign ? "외국인" : "내국인", r.nationality || "", r.visa_type || "", r.visa_expiry || "",
         r.topik_level ? r.topik_level + "급" : "",
         r.is_foreign ? (r.work_permit_ok ? "확인 (" + (r.work_permit_checked_on || "") + ")" : "확인 필요") : "",
+        rating[r.id] ? Number(avgOf(r).toFixed(1)) : "", rating[r.id] ? rating[r.id].n : "",
       ]));
   });
 
