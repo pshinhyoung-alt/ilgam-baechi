@@ -444,8 +444,12 @@
       if (window.kakao && kakao.maps && kakao.maps.services) return resolve();
       const s = document.createElement("script");
       s.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey=" + encodeURIComponent(key) + "&libraries=services&autoload=false";
-      s.onload = () => kakao.maps.load(resolve);
-      s.onerror = () => reject(new Error("load"));
+      const timer = setTimeout(() => reject(new Error("load: 10초 안에 지도 서비스가 응답하지 않았습니다")), 10000);
+      s.onload = () => {
+        try { kakao.maps.load(() => { clearTimeout(timer); resolve(); }); }
+        catch (err) { clearTimeout(timer); reject(new Error("load: " + err.message)); }
+      };
+      s.onerror = () => { clearTimeout(timer); reject(new Error("load: 지도 스크립트를 받지 못했습니다 (광고 차단 확장 프로그램이나 네트워크 확인)")); };
       document.head.append(s);
     });
   }
@@ -477,7 +481,8 @@
       const found = await new Promise((resolve, reject) => {
         new kakao.maps.services.Geocoder().addressSearch(address, (res, status) => {
           if (status === kakao.maps.services.Status.OK && res[0]) resolve({ lat: Number(res[0].y), lng: Number(res[0].x) });
-          else reject(new Error("notfound"));
+          else if (status === kakao.maps.services.Status.ZERO_RESULT) reject(new Error("notfound"));
+          else reject(new Error("search: 카카오가 주소 검색을 거부했습니다 (카카오맵 사용 설정이 꺼져 있을 수 있습니다)"));
         });
       });
       $("lat").value = found.lat.toFixed(6);
@@ -487,7 +492,8 @@
     } catch (e) {
       note.textContent = e.message === "notfound"
         ? "주소로 좌표를 찾지 못했습니다. 주소를 더 자세히 쓰거나 좌표를 직접 입력해 주세요."
-        : "지도 서비스를 불러오지 못했습니다. 키와 등록한 사이트 주소를 확인해 주세요.";
+        : "지도 서비스를 불러오지 못했습니다. (" + (e.message || e) + ") 키와 등록한 사이트 주소, 카카오맵 사용 설정을 확인해 주세요.";
+      console.error(e);
     }
   });
 
