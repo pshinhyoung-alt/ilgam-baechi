@@ -285,7 +285,8 @@
       $("print").disabled = true;
       $("totalCard").hidden = $("sumCard").hidden = $("payCard").hidden = $("billCard").hidden = $("branchCard").hidden = $("workerCard").hidden = $("detailCard").hidden = true;
       $("status").textContent = "";
-      $("err").textContent = /[가-힣]/.test(e.message || "") ? e.message : "정산 자료를 불러오지 못했습니다. (서버 SQL 18번이 적용되었는지 확인하세요)";
+      console.error(e);
+      $("err").textContent = /[가-힣]/.test(e.message || "") ? e.message : "정산 자료를 불러오지 못했습니다. (" + (e.message || e) + ")";
     }
     $("run").disabled = false;
   }
