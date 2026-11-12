@@ -152,6 +152,7 @@
       const jobTd = el("td", jobName[r.job_type_id] || "(삭제된 직종)");
       if (r.cert_pref === "require") jobTd.append(el("div", "자격증 필수", "tag warn"));
       else if (r.cert_pref === "prefer") jobTd.append(el("div", "자격증 우선", "tag"));
+      if (r.min_topik) jobTd.append(el("div", "한국어 TOPIK " + r.min_topik + "급↑", "tag"));
       const addrTd = el("td", r.address);
       if (r.lat == null) addrTd.append(el("div", "좌표 없음", "tag warn"));
       const stTd = el("td", r.deleted_at ? "휴지통" : STATUS[r.status]);
@@ -378,6 +379,7 @@
     $("headcount").value = r ? r.headcount : 1;
     $("req").value = r ? r.requirements || "" : "";
     $("certPref").value = r ? r.cert_pref || "none" : "none";
+    $("minTopik").value = r && r.min_topik ? r.min_topik : "";
     $("offered").value = r ? r.offered_wage : "";
     $("wage").value = r ? r.wage : "";
     $("radius").value = r ? r.radius_m : settings.default_radius_m;
@@ -518,6 +520,7 @@
       headcount: Number($("headcount").value),
       requirements: $("req").value.trim() || null,
       cert_pref: $("certPref").value,
+      min_topik: $("minTopik").value ? Number($("minTopik").value) : null,
       radius_m: radius,
       lat,
       lng,

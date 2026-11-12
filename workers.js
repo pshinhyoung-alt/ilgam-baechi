@@ -17,6 +17,12 @@
   if (isAdmin) views.push(["trash", "휴지통"]);
   for (const [v, label] of views) $("view").append(new Option(label, v));
 
+  // 체류 만료까지 남은 날수 (지났으면 음수, 만료일이 없으면 null)
+  function visaDaysLeft(r) {
+    if (!r.is_foreign || !r.visa_expiry) return null;
+    return Math.round((new Date(r.visa_expiry + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000);
+  }
+
   // 머리글을 눌러 정렬: 이름, 전화, 직종, 가능 지역, 가능 요일(많은 순), 상태
   const jobLabel = (r) => r.job_type_ids.map((id) => (jobTypes.find((j) => j.id === id) || {}).name || "").join(",");
   const sorter = setupSort(document.querySelector("main table"), [
@@ -97,9 +103,12 @@
       if (dayf && !r.available_days.includes(dayf)) return false;
       if (flag === "consent" && r.consent_confirmed) return false;
       if (flag === "notrain" && (r.training_done || !r.job_type_ids.some((id) => reqTrain.has(id)))) return false;
+      if (flag === "foreign" && !r.is_foreign) return false;
+      if (flag === "permit" && !(r.is_foreign && !r.work_permit_ok)) return false;
+      if (flag === "visa") { const n = visaDaysLeft(r); if (n === null || n > 30) return false; }
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd))
-        || [r.area, r.memo, jobLabel(r)].join("\n").toLowerCase().includes(q);
+        || [r.area, r.memo, jobLabel(r), r.nationality, r.visa_type].join("\n").toLowerCase().includes(q);
     }));
 
     shown = list;
@@ -111,6 +120,18 @@
       const tr = document.createElement("tr");
       const nameTd = el("td", r.name);
       if (!r.consent_confirmed) nameTd.append(el("div", "동의 확인 필요", "tag warn"));
+      if (r.is_foreign) {
+        const fx = el("div");
+        fx.append(el("span", "외국인" + (r.nationality ? " · " + r.nationality : ""), "tag"));
+        if (r.visa_type) fx.append(el("span", r.visa_type, "tag"));
+        if (r.topik_level) fx.append(el("span", "TOPIK " + r.topik_level + "급", "tag"));
+        const left = visaDaysLeft(r);
+        if (left === null) fx.append(el("span", "체류 만료일 미입력", "tag warn"));
+        else if (left < 0) fx.append(el("span", "체류 만료됨 (" + r.visa_expiry + ")", "tag warn"));
+        else if (left <= 30) fx.append(el("span", "체류 만료 " + left + "일 전", "tag warn"));
+        if (!r.work_permit_ok) fx.append(el("span", "취업 가능 확인 필요", "tag warn"));
+        nameTd.append(fx);
+      }
       if (r.training_done) nameTd.append(el("div", "자체교육 이수", "tag"));
       else if (r.job_type_ids.some((id) => reqTrain.has(id))) nameTd.append(el("div", "자체교육 미이수", "tag warn"));
       if (privateReady && !r.deleted_at) {
@@ -138,12 +159,16 @@
     if (!shown.length) { alert("내려받을 구직자가 없습니다."); return; }
     const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
     saveXlsx("구직자", "구직자",
-      ["이름", "전화", "직종", "가능 지역", "가능 요일", "상태", "동의 확인", "자체교육 이수"],
+      ["이름", "전화", "직종", "가능 지역", "가능 요일", "상태", "동의 확인", "자체교육 이수",
+        "구분", "국적", "체류자격", "체류 만료일", "TOPIK", "취업 가능 확인"],
       shown.map((r) => [
         r.name, fmtPhone(r.phone), r.job_type_ids.map((id) => jobName[id] || "(삭제된 직종)").join(", "), r.area || "",
         DAYS.filter((d) => r.available_days.includes(d)).join(" "),
         r.deleted_at ? "휴지통" : r.status === "paused" ? "활동 중지" : "활동 중",
         r.consent_confirmed ? "확인" : "확인 필요", r.training_done ? "이수" : "",
+        r.is_foreign ? "외국인" : "내국인", r.nationality || "", r.visa_type || "", r.visa_expiry || "",
+        r.topik_level ? r.topik_level + "급" : "",
+        r.is_foreign ? (r.work_permit_ok ? "확인 (" + (r.work_permit_checked_on || "") + ")" : "확인 필요") : "",
       ]));
   });
 
@@ -385,6 +410,15 @@
     $("shareConsent").checked = r ? !!r.share_consent : false;
     $("trainDone").checked = r ? !!r.training_done : false;
     $("trainDate").value = r && r.training_date ? r.training_date : "";
+    $("nat").value = r && r.is_foreign ? "foreign" : "kr";
+    $("nationality").value = r && r.nationality ? r.nationality : "";
+    $("visaType").value = r && r.visa_type ? r.visa_type : "";
+    $("visaExpiry").value = r && r.visa_expiry ? r.visa_expiry : "";
+    $("topik").value = r && r.topik_level ? r.topik_level : "";
+    $("visaNote").value = r && r.visa_note ? r.visa_note : "";
+    $("permitOk").checked = !!(r && r.work_permit_ok);
+    $("permitInfo").textContent = r && r.work_permit_ok && r.work_permit_checked_on ? "확인한 날: " + r.work_permit_checked_on + " (체류자격·만료일을 바꾸면 확인 날짜가 새로 기록됩니다)" : "";
+    $("foreignBox").hidden = $("nat").value !== "foreign";
     for (const cb of $("jobs").querySelectorAll("input")) cb.checked = !!r && r.job_type_ids.includes(cb.value);
     for (const cb of $("days").querySelectorAll("input")) cb.checked = !!r && r.available_days.includes(cb.value);
     if (isHq) $("branch").value = r ? r.branch_id : (me.branch_id || branches[0]?.id);
@@ -399,6 +433,7 @@
   $("cancel").addEventListener("click", () => $("dlg").close());
   $("q").addEventListener("input", render);
   $("view").addEventListener("change", render);
+  $("nat").addEventListener("change", () => { $("foreignBox").hidden = $("nat").value !== "foreign"; });
   for (const id of ["jobF", "dayF", "flagF"]) $(id).addEventListener("change", render);
 
   $("f").addEventListener("submit", async (e) => {
@@ -411,6 +446,12 @@
     const trainDate = $("trainDate").value;
     if (trainDone && !trainDate) { $("err").textContent = "자체교육 이수일을 입력해 주세요."; return; }
     if (trainDone && trainDate > todayStr()) { $("err").textContent = "자체교육 이수일이 오늘보다 뒤입니다. 날짜를 확인해 주세요."; return; }
+
+    // 외국인: 취업 가능 확인을 체크했다면 체류자격과 만료일 필요, 이미 지난 만료일은 불가
+    const foreign = $("nat").value === "foreign";
+    const permitOk = foreign && $("permitOk").checked;
+    if (permitOk && (!$("visaType").value.trim() || !$("visaExpiry").value)) { $("err").textContent = "취업 가능 확인을 체크하려면 체류자격과 체류 만료일을 입력해 주세요."; return; }
+    if (permitOk && $("visaExpiry").value < todayStr()) { $("err").textContent = "체류 만료일이 이미 지났습니다. 갱신했다면 새 만료일을 입력해 주세요."; return; }
 
     // 계좌: 세 칸 중 하나라도 적었으면 모두 필요
     const bank = { name: $("bankName").value.trim(), no: $("bankNo").value.trim(), holder: $("bankHolder").value.trim() };
@@ -431,6 +472,13 @@
       share_consent: $("shareConsent").checked,
       training_done: trainDone,
       training_date: trainDone ? trainDate : null,
+      is_foreign: foreign,
+      nationality: foreign ? $("nationality").value.trim() || null : null,
+      visa_type: foreign ? $("visaType").value.trim() || null : null,
+      visa_expiry: foreign ? $("visaExpiry").value || null : null,
+      topik_level: foreign && $("topik").value ? Number($("topik").value) : null,
+      visa_note: foreign ? $("visaNote").value.trim() || null : null,
+      work_permit_ok: permitOk,
     };
     if (!editing) payload.branch_id = isHq ? $("branch").value : me.branch_id;
     else if (isHq) payload.branch_id = $("branch").value;
@@ -512,6 +560,11 @@
       q.call_time && "연락 가능: " + q.call_time,
       q.details && "경력·자격: " + q.details,
     ].filter(Boolean).join(" / ").slice(0, 500);
+    // 홈페이지 양식의 '구분'에 외국인이라고 적혀 있으면 외국인 칸을 열어 줌 (체류자격 등은 직접 확인해 입력)
+    if (q.nationality && q.nationality.includes("외국")) {
+      $("nat").value = "foreign";
+      $("foreignBox").hidden = false;
+    }
     // 홈페이지 동의는 '성함·연락처·희망 조건' 수집에 대한 것이라서, 신분증·계좌 동의는 따로 받아야 함 → 체크하지 않음
     $("consent").checked = false;
     updateQualVisibility();

@@ -20,6 +20,32 @@ const AssignUI = (() => {
   const tag = (text, warn) => el("span", text, "tag" + (warn ? " warn" : ""));
 
   let req = null, ctx = null, workers = [], assigned = [], past = [], sameDay = [], certSet = new Set();
+  let clientDone = {};   // 구직자 id -> 이 의뢰인 현장에서 일을 마친 횟수
+  let picks = [];        // 지금 화면 기준 추천 대상 (점수 순)
+
+  // 추천 점수: 높을수록 먼저 추천. 이유(reasons)도 함께 돌려줍니다.
+  function scoreOf(w, f) {
+    let s = 0;
+    const why = [];
+    if (f.jobOk) { s += 40; why.push("직종 일치"); }
+    if (f.dayOk === true) { s += 15; why.push("가능 요일"); }
+    else if (f.dayOk === null) s += 5;
+    else s -= 20;
+    const toks = (w.area || "").split(/[,\s/]+/).filter((t) => t.length >= 2);
+    if (toks.length && toks.some((t) => (req.address || "").includes(t))) { s += 15; why.push("가능 지역 일치"); }
+    else if (!toks.length) s += 3;
+    const n = clientDone[w.id] || 0;
+    if (n) { s += Math.min(n, 2) * 5; why.push("이 의뢰인 현장 " + n + "회 근무"); }
+    if (req.cert_pref !== "none" && f.hasCert) { s += 10; why.push("자격증"); }
+    if (ctx.trainReq && w.training_done) { s += 5; why.push("자체교육 이수"); }
+    if (w.no_show_count > 0) s -= Math.min(w.no_show_count * 10, 30);
+    // 한국어: 의뢰가 요구한 경우에만, 외국인에게만 적용 (국적 자체는 점수에 반영하지 않음)
+    if (req.min_topik && w.is_foreign) {
+      if ((w.topik_level || 0) >= req.min_topik) { s += 10; why.push("TOPIK " + w.topik_level + "급"); }
+      else s -= 30;
+    }
+    return { s, why };
+  }
 
   // 구직자에게 보낼 링크 (이 화면과 같은 위치의 w.html)
   function linkFor(a) {
@@ -38,7 +64,7 @@ const AssignUI = (() => {
   }
 
   async function reload() {
-    const [rq, ws, mine, day, dc] = await Promise.all([
+    const [rq, ws, mine, day, dc, hist] = await Promise.all([
       db.from("job_requests").select("*").eq("id", req.id).maybeSingle(),
       db.from("workers").select("*").eq("branch_id", req.branch_id).is("deleted_at", null).order("name"),
       db.from("assignments").select("*").eq("request_id", req.id).order("assigned_at"),
@@ -47,6 +73,10 @@ const AssignUI = (() => {
         .not("status", "in", "(cancelled,declined)")
         .eq("job_requests.work_date", req.work_date),
       db.from("worker_documents").select("worker_id").eq("kind", "qualification"),
+      db.from("assignments")
+        .select("worker_id,job_requests!inner(client_id)")
+        .in("status", ["checked_out", "completed"])
+        .eq("job_requests.client_id", req.client_id),
     ]);
     if (!rq.data) { $("adlg").close(); ctx.onChange(); return; }
     if (ws.error || mine.error || day.error) { $("aErr").textContent = "정보를 불러오지 못했습니다."; return; }
@@ -56,6 +86,8 @@ const AssignUI = (() => {
     past = mine.data.filter((a) => INACTIVE.includes(a.status));
     sameDay = day.data;
     certSet = new Set((dc.data || []).map((x) => x.worker_id));   // 자격증 사본이 등록된 구직자
+    clientDone = {};
+    for (const h of hist.data || []) clientDone[h.worker_id] = (clientDone[h.worker_id] || 0) + 1;   // 불러오지 못해도 추천은 계속
     render();
   }
 
@@ -72,7 +104,8 @@ const AssignUI = (() => {
 
     $("aSummary").textContent = req.work_date + "(" + weekday + ") " + hhmm(req.start_time) + "~" + hhmm(req.end_time)
       + " · " + ctx.clientName + " · " + ctx.jobName + " · " + req.address
-      + (req.cert_pref === "require" ? " · 요양보호사 자격증 필수" : req.cert_pref === "prefer" ? " · 자격증 있는 분 우선" : "");
+      + (req.cert_pref === "require" ? " · 요양보호사 자격증 필수" : req.cert_pref === "prefer" ? " · 자격증 있는 분 우선" : "")
+      + (req.min_topik ? " · 외국인은 TOPIK " + req.min_topik + "급 이상" : "");
     $("aCount").textContent = "(" + assigned.length + " / 필요 " + req.headcount + "명 · 상태: " + STATUS[req.status] + ")";
     $("aNoCoord").textContent = req.lat == null
       ? "현장 좌표가 등록되지 않았습니다. 이대로는 구직자가 위치로 출근을 확인할 수 없습니다. 인력의뢰 [수정]에서 좌표를 등록하세요."
@@ -160,11 +193,22 @@ const AssignUI = (() => {
       const paused = w.status !== "active";
       const hasCert = certSet.has(w.id);
       const certBlock = req.cert_pref === "require" && !hasCert;
-      const disabled = full || blocked || clash || paused || certBlock;
-      const certRank = req.cert_pref !== "none" && !hasCert ? 3 : 0;   // 자격증 우선·필수면 있는 분이 위로
-      const trainRank = ctx.trainReq && !w.training_done ? 2 : 0;   // 자체교육 필요한 직종이면 이수자가 위로
-      return { w, jobOk, dayOk, clash, paused, hasCert, certBlock, disabled, rank: (disabled ? 100 : 0) + (jobOk ? 0 : 4) + certRank + trainRank + (dayOk === false ? 2 : 0) + (w.no_show_count >= 3 ? 1 : 0) };
-    }).sort((a, b) => a.rank - b.rank || a.w.name.localeCompare(b.w.name, "ko"));
+      // 외국인: 체류 만료일이 근무일보다 이전이면 배치 불가, 취업 가능 확인이 안 됐거나 한국어 요구 수준 미달이면 자동 추천에서 제외
+      const visaExpired = !!w.is_foreign && !!w.visa_expiry && w.visa_expiry < req.work_date;
+      const permitMissing = !!w.is_foreign && !w.work_permit_ok;
+      const topikLow = !!(req.min_topik && w.is_foreign && (w.topik_level || 0) < req.min_topik);
+      const disabled = full || blocked || clash || paused || certBlock || visaExpired;
+      const sc = scoreOf(w, { jobOk, dayOk, hasCert });
+      return { w, jobOk, dayOk, clash, paused, hasCert, certBlock, visaExpired, permitMissing, topikLow, disabled, score: sc.s, why: sc.why };
+    }).sort((a, b) => (a.disabled - b.disabled) || b.score - a.score || a.w.name.localeCompare(b.w.name, "ko"));
+
+    // 자동 배치 대상: 배치 가능한 사람 중 직종이 맞는 분만, 점수 높은 순으로 남은 인원만큼
+    const need = Math.max(req.headcount - assigned.length, 0);
+    picks = info.filter((c) => !c.disabled && c.jobOk && !c.permitMissing && !c.topikLow).slice(0, need);
+    $("aAuto").disabled = blocked || !picks.length;
+    $("aAutoHint").textContent = blocked || full ? "" : picks.length
+      ? "점수 높은 " + picks.length + "명을 한 번에 배치합니다. 확정은 따로 누릅니다."
+      : "자동으로 배치할 수 있는 직종 일치 구직자가 없습니다.";
 
     $("aNote").textContent = blocked ? "보류 중이거나 완료된 인력의뢰라서 배치할 수 없습니다." : full ? "필요 인원이 모두 배치되었습니다." : "";
     const ct = $("aCands");
@@ -173,6 +217,9 @@ const AssignUI = (() => {
     for (const c of info) {
       const tr = document.createElement("tr");
       const tags = el("div");
+      if (!c.disabled) tags.append(tag("추천 " + c.score + "점", c.score < 40));
+      if (c.why.includes("가능 지역 일치")) tags.append(tag("가능 지역 일치"));
+      if (c.why.some((x) => x.startsWith("이 의뢰인"))) tags.append(tag(c.why.find((x) => x.startsWith("이 의뢰인"))));
       tags.append(tag(c.jobOk ? "직종 일치" : "직종 다름", !c.jobOk));
       if (c.hasCert) tags.append(tag("요양보호사 자격증"));
       else if (c.certBlock) tags.append(tag("자격증 없음 (필수)", true));
@@ -182,6 +229,13 @@ const AssignUI = (() => {
       else if (c.dayOk === false) tags.append(tag(weekday + "요일 불가로 입력됨", true));
       else tags.append(tag("가능 요일 미입력"));
       if (c.w.no_show_count > 0) tags.append(tag("노쇼 " + c.w.no_show_count + "회", c.w.no_show_count >= 3));
+      if (c.w.is_foreign) {
+        tags.append(tag("외국인" + (c.w.topik_level ? " · TOPIK " + c.w.topik_level + "급" : "")));
+        if (c.visaExpired) tags.append(tag("체류 만료일(" + c.w.visa_expiry + ")이 근무일보다 이전", true));
+        else if (!c.w.visa_expiry) tags.append(tag("체류 만료일 미입력", true));
+        if (c.permitMissing) tags.append(tag("취업 가능 확인 필요", true));
+        if (c.topikLow) tags.append(tag("TOPIK " + req.min_topik + "급 이상 요구", true));
+      }
       if (c.clash) tags.append(tag("같은 시간 다른 배치", true));
       if (c.paused) tags.append(tag("활동 중지", true));
 
@@ -191,6 +245,7 @@ const AssignUI = (() => {
       const b = el("button", "배치", "primary");
       b.disabled = c.disabled;
       b.addEventListener("click", async () => {
+        if (c.permitMissing && !confirm(c.w.name + " 님은 외국인이며 취업 가능한 체류자격 확인이 기록되지 않았습니다.\n구직자 화면에서 확인 후 체크하는 것을 권합니다. 그래도 배치할까요?")) return;
         b.disabled = true;
         const { error } = await db.from("assignments").insert({ request_id: req.id, worker_id: c.w.id });
         if (error) { fail(error, "배치하지 못했습니다."); await reload(); return; }
@@ -265,6 +320,21 @@ const AssignUI = (() => {
   }
 
   $("aQ").addEventListener("input", () => { if (req) render(); });
+  $("aAuto").addEventListener("click", async () => {
+    if (!picks.length) return;
+    const names = picks.map((c, i) => (i + 1) + ". " + c.w.name + " (" + c.score + "점)").join("\n");
+    if (!confirm("아래 구직자를 배치합니다.\n\n" + names + "\n\n계속할까요?")) return;
+    $("aAuto").disabled = true;
+    let ok = 0, msg = "";
+    for (const c of picks) {
+      const { error } = await db.from("assignments").insert({ request_id: req.id, worker_id: c.w.id });
+      if (error) { msg = c.w.name + " 님: " + (/[가-힣]/.test(error.message) ? error.message : "배치하지 못했습니다."); break; }
+      ok++;
+    }
+    await afterChange();
+    if (msg) $("aErr").textContent = ok + "명 배치 후 멈췄습니다. " + msg;
+    else { $("aErr").textContent = ""; $("aInfo").textContent = ok + "명을 추천 순으로 배치했습니다. 내용을 확인하고 [배치 확정]을 눌러 주세요."; }
+  });
   $("aClose").addEventListener("click", () => $("adlg").close());
   $("aConfirm").addEventListener("click", async () => {
     if (!confirm("배치를 확정합니다.\n확정 후 구직자에게 링크를 보내 주세요. (문자 자동 발송은 아직 연결 전입니다.)\n계속할까요?")) return;

@@ -78,6 +78,14 @@
       <option value="prefer">있는 분 우선</option>
       <option value="require">필수 (자격증 사본이 등록된 분만 배치)</option>
     </select>
+    <label class="f" for="minTopik">한국어 의사소통 (외국인 구직자에게만 적용)</label>
+    <select id="minTopik">
+      <option value="">제한 없음</option>
+      <option value="1">TOPIK 1급 이상</option><option value="2">TOPIK 2급 이상</option>
+      <option value="3">TOPIK 3급 이상</option><option value="4">TOPIK 4급 이상</option>
+      <option value="5">TOPIK 5급 이상</option><option value="6">TOPIK 6급</option>
+    </select>
+    <div class="muted">의뢰인이 한국어 의사소통을 요구하는 현장일 때만 고르세요. 자동 추천에서 이 급수보다 낮은 외국인 구직자는 빠집니다.</div>
     <label class="f" for="offered">의뢰인 제시 일당 (원) *</label>
     <input type="number" id="offered" min="1" step="1" required>
     <label class="f" for="wage">확정 단가 (원)</label>
@@ -127,6 +135,10 @@
   <div class="muted" id="aPast"></div>
   <div class="muted" id="aConfirmedNote" style="color:#1b7f3b"></div>
   <h3 style="font-size:15px;margin:16px 0 6px">배치할 구직자 고르기</h3>
+  <div class="toolbar" style="align-items:center;margin-bottom:6px">
+    <button type="button" class="primary" id="aAuto">추천 자동 배치</button>
+    <span class="muted" id="aAutoHint"></span>
+  </div>
   <input type="search" id="aQ" placeholder="이름·전화번호 검색" style="width:100%;margin-bottom:6px">
   <div class="muted" id="aNote"></div>
   <div class="scroll" style="max-height:300px;overflow:auto"><table><tbody id="aCands"></tbody></table></div>
