@@ -27,6 +27,14 @@
 </header>
 <main>
   <div class="card" id="me"><span class="muted">불러오는 중...</span></div>
+  <div class="card" id="suspectCard" hidden>
+    <h2 style="color:#b3261e">노쇼 의심</h2>
+    <div class="muted" style="margin-bottom:6px">작업 시작 시간이 15분 넘게 지났는데 아직 출근하지 않은 구직자입니다. 전화로 확인하고, 연락이 안 되면 [인력의뢰]에서 해당 의뢰의 [배치]를 열어 [노쇼 처리] 후 대체 인력을 배치하세요.</div>
+    <table>
+      <thead><tr><th>작업</th><th>구직자</th><th>의뢰인</th><th>지난 시간</th><th></th></tr></thead>
+      <tbody id="suspectRows"></tbody>
+    </table>
+  </div>
   <div class="card" id="staffCard" hidden>
     <h2>직원 목록</h2>
     <table>
@@ -80,10 +88,34 @@
       el("div", "단가·수수료 수정: " + (me.can_edit_wage ? "가능" : "불가"), "muted")
     );
 
+    await loadSuspects();
     if (me.role === "branch_staff") return;
     document.getElementById("navSettings").hidden = false;
     document.getElementById("navSettlement").hidden = false;
     await loadStaff(me);
+  }
+
+  // 노쇼 의심 목록 (기능이 아직 없거나 불러오지 못하면 조용히 숨김)
+  async function loadSuspects() {
+    const { data, error } = await db.rpc("no_show_suspects");
+    if (error || !data || !data.length) return;
+    const tbody = document.getElementById("suspectRows");
+    tbody.replaceChildren();
+    for (const s of data) {
+      const tr = document.createElement("tr");
+      const late = s.minutes_late >= 60 ? Math.floor(s.minutes_late / 60) + "시간 " + (s.minutes_late % 60) + "분" : s.minutes_late + "분";
+      const call = el("a", "전화 " + s.worker_phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3"));
+      call.href = "tel:" + s.worker_phone;
+      const go = el("a", "인력의뢰 열기");
+      go.href = "requests.html";
+      const act = el("td");
+      act.append(call, document.createTextNode("  "), go);
+      tr.append(
+        el("td", s.work_date + " " + s.start_time.slice(0, 5) + (s.job_name ? " · " + s.job_name : "")),
+        el("td", s.worker_name), el("td", s.client_name), el("td", late + " 지남"), act);
+      tbody.append(tr);
+    }
+    document.getElementById("suspectCard").hidden = false;
   }
 
   async function loadStaff(me) {

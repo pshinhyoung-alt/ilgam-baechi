@@ -187,6 +187,10 @@ const AssignUI = (() => {
       if (ctx.me.role !== "branch_staff" && ["working", "checked_out", "completed"].includes(a.status)) {
         acts.append(btn(rt ? "별점 수정" : "별점 입력", "", () => setRating(a, name, rt)));
       }
+      if (["assigned", "notified", "accepted"].includes(a.status) && startPassed()) {
+        stTd.append(el("div", "작업 시작 시간이 지났는데 아직 출근하지 않았습니다.", "tag warn"));
+        acts.append(btn("노쇼 처리", "danger", () => noShow(a, name)));
+      }
       if (["assigned", "notified", "accepted"].includes(a.status)) {
         acts.append(btn("수동 출근", "", () => manual(a, "in", name)));
       }
@@ -208,7 +212,7 @@ const AssignUI = (() => {
 
     // 취소·거절된 배치
     $("aPast").textContent = past.length
-      ? "지난 배치: " + past.map((a) => (byId[a.worker_id] ? byId[a.worker_id].name : "(구직자)") + "(" + ASTATUS[a.status] + ")").join(", ")
+      ? "지난 배치: " + past.map((a) => (byId[a.worker_id] ? byId[a.worker_id].name : "(구직자)") + "(" + (a.no_show ? "노쇼" : ASTATUS[a.status]) + ")").join(", ")
       : "";
 
     // 확정 버튼 (관리자만)
@@ -347,6 +351,22 @@ const AssignUI = (() => {
     if (error) { fail(error, "바꾸지 못했습니다."); return; }
     $("aErr").textContent = "";
     $("aInfo").textContent = "";
+    await afterChange();
+  }
+
+  // 작업 시작 시간이 지났는지 (한국 시간 기준)
+  function startPassed() {
+    return new Date(req.work_date + "T" + req.start_time.slice(0, 5) + ":00+09:00") <= new Date();
+  }
+
+  // 노쇼 처리: 배치를 취소하고 구직자의 노쇼 횟수를 올림. 자리가 비므로 대체 인력을 바로 배치할 수 있음
+  async function noShow(a, name) {
+    const reason = prompt(name + " 님을 노쇼로 처리합니다.\n배치가 취소되고, 노쇼 횟수가 1회 올라가며, 자동 추천 점수가 낮아집니다.\n\n메모를 입력하세요. (예: 연락 안 됨, 비워 두면 '출근하지 않음')", "");
+    if (reason === null) return;
+    const { error } = await db.rpc("mark_no_show", { p_assignment: a.id, p_reason: reason.trim() });
+    if (error) { fail(error, "노쇼 처리하지 못했습니다."); return; }
+    $("aErr").textContent = "";
+    $("aInfo").textContent = name + " 님을 노쇼로 처리했습니다. 아래 추천 목록에서 대체 인력을 배치해 주세요.";
     await afterChange();
   }
 

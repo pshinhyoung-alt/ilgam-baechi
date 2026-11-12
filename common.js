@@ -146,6 +146,16 @@ async function requireStaff(current) {
     const a = document.querySelector('#nav a[href="inquiries.html"]');
     if (a) a.append(el("span", count > 99 ? "99+" : String(count), "badge"));
   });
+  // 인력의뢰 메뉴에 '노쇼 의심'(작업 시작 15분 뒤에도 출근 안 한 배치) 건수를 표시 (기능이 아직 없으면 조용히 건너뜀)
+  db.rpc("no_show_suspects").then(({ data, error }) => {
+    if (error || !data || !data.length) return;
+    const a = document.querySelector('#nav a[href="requests.html"]');
+    if (a) {
+      const b = el("span", data.length > 99 ? "99+" : String(data.length), "badge");
+      b.title = "출근 시간이 지났는데 출근하지 않은 구직자가 " + data.length + "명 있습니다";
+      a.append(b);
+    }
+  });
   return me;
 }
 

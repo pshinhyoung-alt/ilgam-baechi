@@ -135,6 +135,7 @@
       const tr = document.createElement("tr");
       const nameTd = el("td", r.name);
       if (!r.consent_confirmed) nameTd.append(el("div", "동의 확인 필요", "tag warn"));
+      if (r.no_show_count > 0) nameTd.append(el("div", "노쇼 " + r.no_show_count + "회", r.no_show_count >= 3 ? "tag warn" : "tag"));
       if (rating[r.id]) {
         const rl = el("div", undefined, "muted");
         const star = el("span", "★");
@@ -434,6 +435,8 @@
     $("shareConsent").checked = r ? !!r.share_consent : false;
     $("trainDone").checked = r ? !!r.training_done : false;
     $("trainDate").value = r && r.training_date ? r.training_date : "";
+    $("noshowBox").hidden = !(isAdmin && r);
+    $("noshow").value = r ? r.no_show_count || 0 : "";
     $("nat").value = r && r.is_foreign ? "foreign" : "kr";
     $("nationality").value = r && r.nationality ? r.nationality : "";
     $("visaType").value = r && r.visa_type ? r.visa_type : "";
@@ -506,6 +509,12 @@
     };
     if (!editing) payload.branch_id = isHq ? $("branch").value : me.branch_id;
     else if (isHq) payload.branch_id = $("branch").value;
+    // 노쇼 횟수는 관리자가 수정할 때만 보냄 (직원은 서버에서도 막힘)
+    if (isAdmin && editing && editing.id && $("noshow").value !== "") {
+      const ns = Number($("noshow").value);
+      if (!Number.isInteger(ns) || ns < 0) { $("err").textContent = "노쇼 횟수는 0 이상의 정수로 입력해 주세요."; return; }
+      if (ns !== (editing.no_show_count || 0)) payload.no_show_count = ns;
+    }
 
     $("save").disabled = true;
     $("err").textContent = "";
