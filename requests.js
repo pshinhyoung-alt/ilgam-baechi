@@ -153,6 +153,8 @@
       if (r.cert_pref === "require") jobTd.append(el("div", "자격증 필수", "tag warn"));
       else if (r.cert_pref === "prefer") jobTd.append(el("div", "자격증 우선", "tag"));
       if (r.min_topik) jobTd.append(el("div", "한국어 TOPIK " + r.min_topik + "급↑", "tag"));
+      if (r.client_confirm === "ok") jobTd.append(el("div", "의뢰인 확인 완료", "tag"));
+      else if (r.client_confirm === "problem") jobTd.append(el("div", "의뢰인: 문제 있음", "tag warn"));
       const addrTd = el("td", r.address);
       if (r.lat == null) addrTd.append(el("div", "좌표 없음", "tag warn"));
       const stTd = el("td", r.deleted_at ? "휴지통" : STATUS[r.status]);

@@ -20,6 +20,8 @@ const AssignUI = (() => {
   const tag = (text, warn) => el("span", text, "tag" + (warn ? " warn" : ""));
 
   let req = null, ctx = null, workers = [], assigned = [], past = [], sameDay = [], certSet = new Set();
+  let ratingAvg = {};    // 구직자 id -> { n: 평가 건수, avg: 평균 별점 }
+  let ratingOf = {};     // 이 인력의뢰의 배치 id -> { rating, comment }
   let clientDone = {};   // 구직자 id -> 이 의뢰인 현장에서 일을 마친 횟수
   let picks = [];        // 지금 화면 기준 추천 대상 (점수 순)
 
@@ -39,6 +41,13 @@ const AssignUI = (() => {
     if (req.cert_pref !== "none" && f.hasCert) { s += 10; why.push("자격증"); }
     if (ctx.trainReq && w.training_done) { s += 5; why.push("자체교육 이수"); }
     if (w.no_show_count > 0) s -= Math.min(w.no_show_count * 10, 30);
+    // 의뢰인 평가 평균: 높으면 가점, 낮으면 감점 (평가가 없으면 반영하지 않음)
+    const ra = ratingAvg[w.id];
+    if (ra) {
+      if (ra.avg >= 4.5) { s += 10; why.push("의뢰인 평가 " + ra.avg.toFixed(1) + " (" + ra.n + "건)"); }
+      else if (ra.avg >= 4) { s += 5; why.push("의뢰인 평가 " + ra.avg.toFixed(1) + " (" + ra.n + "건)"); }
+      else if (ra.avg <= 2.5) s -= 15;
+    }
     // 한국어: 의뢰가 요구한 경우에만, 외국인에게만 적용 (국적 자체는 점수에 반영하지 않음)
     if (req.min_topik && w.is_foreign) {
       if ((w.topik_level || 0) >= req.min_topik) { s += 10; why.push("TOPIK " + w.topik_level + "급"); }
@@ -64,7 +73,7 @@ const AssignUI = (() => {
   }
 
   async function reload() {
-    const [rq, ws, mine, day, dc, hist] = await Promise.all([
+    const [rq, ws, mine, day, dc, hist, rats] = await Promise.all([
       db.from("job_requests").select("*").eq("id", req.id).maybeSingle(),
       db.from("workers").select("*").eq("branch_id", req.branch_id).is("deleted_at", null).order("name"),
       db.from("assignments").select("*").eq("request_id", req.id).order("assigned_at"),
@@ -77,6 +86,8 @@ const AssignUI = (() => {
         .select("worker_id,job_requests!inner(client_id)")
         .in("status", ["checked_out", "completed"])
         .eq("job_requests.client_id", req.client_id),
+      db.from("assignment_ratings").select("assignment_id,request_id,worker_id,rating,comment")
+        .order("rated_at", { ascending: false }).limit(1000),
     ]);
     if (!rq.data) { $("adlg").close(); ctx.onChange(); return; }
     if (ws.error || mine.error || day.error) { $("aErr").textContent = "정보를 불러오지 못했습니다."; return; }
@@ -88,6 +99,15 @@ const AssignUI = (() => {
     certSet = new Set((dc.data || []).map((x) => x.worker_id));   // 자격증 사본이 등록된 구직자
     clientDone = {};
     for (const h of hist.data || []) clientDone[h.worker_id] = (clientDone[h.worker_id] || 0) + 1;   // 불러오지 못해도 추천은 계속
+    ratingAvg = {};
+    ratingOf = {};
+    const sums = {};
+    for (const x of rats.data || []) {   // 평가를 불러오지 못해도(SQL 23 전) 추천은 계속
+      const s = sums[x.worker_id] || (sums[x.worker_id] = { n: 0, sum: 0 });
+      s.n += 1; s.sum += x.rating;
+      if (x.request_id === req.id) ratingOf[x.assignment_id] = x;
+    }
+    for (const id of Object.keys(sums)) ratingAvg[id] = { n: sums[id].n, avg: sums[id].sum / sums[id].n };
     render();
   }
 
@@ -111,6 +131,14 @@ const AssignUI = (() => {
       ? "현장 좌표가 등록되지 않았습니다. 이대로는 구직자가 위치로 출근을 확인할 수 없습니다. 인력의뢰 [수정]에서 좌표를 등록하세요."
       : "";
 
+    // 의뢰인 링크 상태 (SQL 23 을 실행하기 전에는 링크 칸이 없어 버튼을 숨김)
+    const hasClientLink = !!req.client_token;
+    $("aClientLink").hidden = !hasClientLink;
+    $("aClientReset").hidden = !(hasClientLink && req.client_confirmed_at && ctx.me.role !== "branch_staff");
+    $("aClientState").textContent = !hasClientLink ? "" : req.client_confirmed_at
+      ? "의뢰인 확인: " + (req.client_confirm === "ok" ? "문제 없음" : "문제 있음 — " + (req.client_confirm_note || "")) + " (" + clock(req.client_confirmed_at) + " 제출)"
+      : "의뢰인 확인: 아직 제출 전";
+
     // 배치된 구직자
     const at = $("aAssigned");
     at.replaceChildren();
@@ -124,6 +152,8 @@ const AssignUI = (() => {
       stTd.style.whiteSpace = "nowrap";
       if (a.checked_in_at) stTd.append(el("div", "출근 " + clock(a.checked_in_at) + (a.checked_out_at ? " · 퇴근 " + clock(a.checked_out_at) : ""), "muted"));
       if (a.complete_note) stTd.append(el("div", "보고: " + a.complete_note, "muted"));
+      const rt = ratingOf[a.id];
+      if (rt) stTd.append(el("div", "의뢰인 평가 " + "★".repeat(rt.rating) + "☆".repeat(5 - rt.rating) + (rt.comment ? " · " + rt.comment : ""), "muted"));
       if (req.fee_enabled || req.tax_enabled) {
         // 소개수수료 → 그 금액을 뺀 기준액으로 원천징수 3.3% → 지급 예정액
         const rate = a.fee_override_rate != null ? Number(a.fee_override_rate) : Number(req.fee_rate);
@@ -320,6 +350,26 @@ const AssignUI = (() => {
   }
 
   $("aQ").addEventListener("input", () => { if (req) render(); });
+  // 의뢰인에게 보낼 링크 (이 화면과 같은 위치의 c.html)
+  $("aClientLink").addEventListener("click", async () => {
+    const url = location.origin + location.pathname.replace(/[^/]*$/, "") + "c.html?t=" + req.client_token;
+    try {
+      await navigator.clipboard.writeText(url);
+      $("aErr").textContent = "";
+      $("aInfo").textContent = ctx.clientName + " 에게 보낼 링크를 복사했습니다. 카카오톡·문자에 붙여넣어 보내 주세요. 의뢰인은 이 링크에서 배치된 구직자를 확인하고, 작업이 끝나면 확인·평가를 남길 수 있습니다.";
+    } catch (e) {
+      prompt("아래 링크를 복사해서 의뢰인에게 보내 주세요.", url);
+    }
+  });
+
+  $("aClientReset").addEventListener("click", async () => {
+    if (!confirm("의뢰인이 제출한 작업 확인과 별점을 지우고 다시 받을 수 있게 합니다.\n계속할까요?")) return;
+    const { error } = await db.rpc("reset_client_confirm", { p_request: req.id });
+    if (error) { fail(error, "초기화하지 못했습니다."); return; }
+    $("aErr").textContent = "";
+    await afterChange();
+  });
+
   $("aAuto").addEventListener("click", async () => {
     if (!picks.length) return;
     const names = picks.map((c, i) => (i + 1) + ". " + c.w.name + " (" + c.score + "점)").join("\n");

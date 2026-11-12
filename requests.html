@@ -138,8 +138,11 @@
   <h3 style="font-size:15px;margin:16px 0 6px">배치할 구직자 고르기</h3>
   <div class="toolbar" style="align-items:center;margin-bottom:6px">
     <button type="button" class="primary" id="aAuto">추천 자동 배치</button>
+    <button type="button" id="aClientLink">의뢰인 링크 복사</button>
+    <button type="button" class="danger" id="aClientReset" hidden>의뢰인 확인 초기화</button>
     <span class="muted" id="aAutoHint"></span>
   </div>
+  <div class="muted" id="aClientState"></div>
   <input type="search" id="aQ" placeholder="이름·전화번호 검색" style="width:100%;margin-bottom:6px">
   <div class="muted" id="aNote"></div>
   <div class="scroll" style="max-height:300px;overflow:auto"><table><tbody id="aCands"></tbody></table></div>
