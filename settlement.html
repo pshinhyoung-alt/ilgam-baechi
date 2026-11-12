@@ -34,6 +34,15 @@
     <label style="display:flex;gap:6px;align-items:center;font-size:14px">
       <input type="checkbox" id="incOut"> 퇴근만 하고 작업 완료 보고를 하지 않은 건도 포함
     </label>
+    <div class="toolbar" style="margin-top:8px;align-items:center">
+      <select id="confF" title="의뢰인이 작업 확인을 보냈는지에 따라 걸러 봅니다. 정산 금액은 바뀌지 않습니다.">
+        <option value="">의뢰인 확인: 전체</option>
+        <option value="ok">확인됨 (문제 없음)</option>
+        <option value="none">아직 확인 안 함</option>
+        <option value="problem">문제 있음</option>
+      </select>
+      <span class="muted">의뢰인 확인 여부로 걸러서 볼 수 있습니다. 정산 금액 계산은 달라지지 않습니다.</span>
+    </div>
     <div class="acts" style="margin-top:10px;align-items:center">
       <button class="primary" id="run">조회</button>
       <button id="xlsx" disabled>엑셀 내려받기</button>

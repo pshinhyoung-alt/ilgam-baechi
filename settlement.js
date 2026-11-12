@@ -29,11 +29,25 @@
     if (!q) return null;
     return (r) => r.worker_name.toLowerCase().includes(q) || (qd !== "" && digits(r.worker_phone).includes(qd));
   }
+  // 의뢰인 확인 걸러보기 (정산 금액 계산에는 영향 없음)
+  const CONF = { ok: "확인됨", problem: "문제 있음" };
+  const confLabel = (r) => CONF[r.client_confirm] || "미확인";
+  function confMatch() {
+    const f = $("confF").value;
+    if (!f) return null;
+    return (r) => (f === "none" ? !r.client_confirm : r.client_confirm === f);
+  }
+  function rowOk(r) {   // 구직자 검색 + 의뢰인 확인 조건을 모두 만족하는지
+    const m = workerMatch(), c = confMatch();
+    return (!m || m(r)) && (!c || c(r));
+  }
+  const isFiltered = () => !!workerMatch() || !!confMatch();
   function applyWorker() {
     const m = workerMatch();
-    rows = m ? allRows.filter(m) : allRows;
+    rows = isFiltered() ? allRows.filter(rowOk) : allRows;
     $("workerClear").hidden = !m;
   }
+  $("confF").addEventListener("change", () => { if (lastQuery) { applyWorker(); render(); } });
   $("workerQ").addEventListener("input", () => { pickedId = ""; if (lastQuery) { applyWorker(); render(); } });
   $("workerClear").addEventListener("click", () => { pickedId = ""; $("workerQ").value = ""; if (lastQuery) { applyWorker(); render(); } });
   const workerLabel = () => (pickedId && rows.length ? rows[0].worker_name + " 님" : "검색: " + $("workerQ").value.trim());
@@ -183,12 +197,14 @@
     $("workerCard").hidden = rows.length === 0 || !!pickedWorker();
     $("print").disabled = rows.length === 0;
     if (!rows.length) {
-      $("status").textContent = allRows.length && workerMatch() ? "검색에 맞는 구직자가 없습니다." : "해당 기간에 정산할 건이 없습니다.";
+      $("status").textContent = allRows.length && isFiltered() ? "조건에 맞는 건이 없습니다." : "해당 기간에 정산할 건이 없습니다.";
       return;
     }
-    const filtered = !!workerMatch();
-    $("status").textContent = rows.length + "건 · " + people.size + "명" + (filtered ? " (전체 " + allRows.length + "건 중 검색 결과)" : "");
-    $("totalTitle").textContent = filtered ? workerLabel() + " 정산 합계" : "조회 기간 합계";
+    const filtered = isFiltered();
+    const problems = rows.filter((r) => r.client_confirm === "problem").length;
+    $("status").textContent = rows.length + "건 · " + people.size + "명" + (filtered ? " (전체 " + allRows.length + "건 중 조건에 맞는 결과)" : "")
+      + (problems ? " · 의뢰인 '문제 있음' " + problems + "건 포함" : "");
+    $("totalTitle").textContent = workerMatch() ? workerLabel() + " 정산 합계" : filtered ? "조건에 맞는 건 합계" : "조회 기간 합계";
 
     // 구직자 개인별 합계 (조회 기간 전체). 머리글을 누르면 정렬
     if (!pickedWorker()) {
@@ -286,6 +302,7 @@
       { h: "직종", f: (r) => r.job_name || "" },
       { h: "의뢰인", f: (r) => r.client_name },
       { h: "상태", f: (r) => STATUS[r.status] || r.status },
+      { h: "의뢰인 확인", f: (r) => confLabel(r) },
       { h: "일당", f: (r) => won(r.wage), num: true },
       { h: "소개수수료", f: (r) => won(r.fee), num: true },
       { h: "원천징수", f: (r) => (r.tax_applied ? won(r.tax_income + r.tax_local) : "-"), num: true },
@@ -323,7 +340,7 @@
   // ───────── 인쇄 / PDF ─────────
   $("print").addEventListener("click", () => {
     if (!rows.length) return;
-    const who = workerMatch() ? " - " + workerLabel() : "";
+    const who = (workerMatch() ? " - " + workerLabel() : "") + (confMatch() ? " - 의뢰인 확인: " + $("confF").selectedOptions[0].text : "");
     printPage("정산서 " + lastQuery.from + " ~ " + lastQuery.to + " (" + UNIT[lastQuery.unit] + ")" + who);
   });
 
@@ -337,7 +354,7 @@
       await db.rpc("log_settlement_export", { p_from: lastQuery.from, p_to: lastQuery.to, p_with_bank: true });
       let full = await fetchRows(true);
       const wm = workerMatch();
-      if (wm) full = full.filter(wm);
+      if (isFiltered()) full = full.filter(rowOk);
       const unit = lastQuery.unit;
       const total = ZERO();
       for (const r of full) add(total, r);
@@ -390,12 +407,12 @@
 
       sheet("상세 내역", full.map((r) => ({
         "일자": r.work_date, "지점": r.branch_name, "구직자": r.worker_name, "연락처": fmtPhone(r.worker_phone),
-        "직종": r.job_name || "", "의뢰인": r.client_name, "상태": STATUS[r.status] || r.status,
+        "직종": r.job_name || "", "의뢰인": r.client_name, "상태": STATUS[r.status] || r.status, "의뢰인 확인": confLabel(r),
         "일당(확정 단가)": r.wage, "제시 일당": r.offered_wage, "소개수수료": r.fee,
         "원천징수 적용": r.tax_applied ? "적용" : "미적용", "소득세": r.tax_income, "지방소득세": r.tax_local, "구직자 지급액": r.net,
-      })), [12, 16, 12, 15, 12, 18, 18, 14, 12, 12, 12, 10, 12, 14]);
+      })), [12, 16, 12, 15, 12, 18, 18, 12, 14, 12, 12, 12, 10, 12, 14]);
 
-      XLSX.writeFile(wb, "정산_" + (wm && full.length ? (pickedId ? full[0].worker_name : "검색결과") + "_" : "") + UNIT[unit] + "_" + lastQuery.from + "_" + lastQuery.to + ".xlsx");
+      XLSX.writeFile(wb, "정산_" + (isFiltered() && full.length ? (pickedId ? full[0].worker_name : wm ? "검색결과" : "조건결과") + "_" : "") + UNIT[unit] + "_" + lastQuery.from + "_" + lastQuery.to + ".xlsx");
     } catch (e) {
       $("err").textContent = /[가-힣]/.test(e.message || "") ? e.message : "엑셀 파일을 만들지 못했습니다.";
     }
