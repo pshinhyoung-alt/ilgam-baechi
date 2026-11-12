@@ -450,12 +450,27 @@
     });
   }
 
+  // "37.351234, 127.951234" 처럼 붙여넣으면 위도·경도 칸으로 나눠 넣음
+  function splitCoords(text) {
+    const m = String(text).match(/(-?\d{1,3}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)/);
+    if (!m) return false;
+    $("lat").value = m[1];
+    $("lng").value = m[2];
+    $("geoNote").textContent = "좌표를 나눠 넣었습니다. ";
+    $("geoNote").append(mapLink(m[1], m[2]));
+    return true;
+  }
+  $("lat").addEventListener("paste", (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData("text");
+    if (splitCoords(t)) e.preventDefault();
+  });
+
   $("geo").addEventListener("click", async () => {
     const note = $("geoNote");
     const address = $("address").value.trim();
     if (!address) { note.textContent = "현장 주소를 먼저 입력해 주세요."; return; }
     const key = window.APP_CONFIG.KAKAO_JS_KEY;
-    if (!key) { note.textContent = "카카오 지도 키가 아직 설정되지 않았습니다. 아래 [내 현재 위치로 입력]을 쓰거나 좌표를 직접 입력해 주세요."; return; }
+    if (!key) { note.textContent = "카카오 지도 키가 아직 설정되지 않았습니다. 구글 지도에서 현장을 찾아 우클릭 → 맨 위 숫자(좌표)를 눌러 복사한 뒤 위도 칸에 붙여넣으세요."; return; }
     note.textContent = "찾는 중...";
     try {
       await loadKakao(key);

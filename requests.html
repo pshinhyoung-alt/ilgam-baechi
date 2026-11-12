@@ -58,9 +58,10 @@
     <input type="text" id="address" required maxlength="200">
     <label class="f">현장 좌표 (구직자 출근 위치 확인에 필요)</label>
     <div class="checks">
-      <input type="number" id="lat" step="any" placeholder="위도 (예: 37.35)" style="width:150px">
-      <input type="number" id="lng" step="any" placeholder="경도 (예: 127.95)" style="width:150px">
+      <input type="text" id="lat" inputmode="decimal" placeholder="위도 (예: 37.35)" style="width:150px">
+      <input type="text" id="lng" inputmode="decimal" placeholder="경도 (예: 127.95)" style="width:150px">
     </div>
+    <div class="muted">좌표를 구글 지도에서 복사했다면 <b>위도 칸에 그대로 붙여넣기</b> 하세요. (예: 37.351234, 127.951234) 위도·경도가 나뉘어 자동으로 들어갑니다.</div>
     <div class="acts" style="margin-top:6px">
       <button type="button" id="geo">주소로 좌표 찾기</button>
       <button type="button" id="geoHere">내 현재 위치로 입력</button>
