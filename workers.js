@@ -26,7 +26,12 @@
 
   $("print").addEventListener("click", () => {
     const q = $("q").value.trim();
-    printPage("구직자 목록 - " + $("view").selectedOptions[0].text + (q ? " (검색: " + q + ")" : ""));
+    const notes = [$("view").selectedOptions[0].text];
+    if ($("jobF").value) notes.push($("jobF").selectedOptions[0].text);
+    if ($("dayF").value) notes.push($("dayF").selectedOptions[0].text);
+    if ($("flagF").value) notes.push($("flagF").selectedOptions[0].text);
+    if (q) notes.push("검색: " + q);
+    printPage("구직자 목록 - " + notes.join(", "));
   });
 
   async function loadBase() {
@@ -36,6 +41,8 @@
     ]);
     jobTypes = jt.data || [];
     branches = br.data || [];
+    for (const j of jobTypes) $("jobF").append(new Option(j.name, j.id));
+    for (const d of DAYS) $("dayF").append(new Option(d + "요일 가능", d));
     for (const j of jobTypes) {
       const lab = el("label");
       const cb = document.createElement("input");
@@ -78,14 +85,21 @@
     const q = $("q").value.trim().toLowerCase();
     const qd = digits(q);
     const view = $("view").value;
-    const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
+    const jf = $("jobF").value, dayf = $("dayF").value, flag = $("flagF").value;
+    const reqTrain = new Set(jobTypes.filter((j) => j.training_required).map((j) => j.id));
+    const jobName =Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
     const list = sorter(rows.filter((r) => {
       const trashed = !!r.deleted_at;
       if (view === "trash" ? !trashed : trashed) return false;
       if (view === "active" && r.status !== "active") return false;
       if (view === "paused" && r.status !== "paused") return false;
+      if (jf && !r.job_type_ids.includes(jf)) return false;
+      if (dayf && !r.available_days.includes(dayf)) return false;
+      if (flag === "consent" && r.consent_confirmed) return false;
+      if (flag === "notrain" && (r.training_done || !r.job_type_ids.some((id) => reqTrain.has(id)))) return false;
       if (!q) return true;
-      return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
+      return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd))
+        || [r.area, r.memo, jobLabel(r)].join("\n").toLowerCase().includes(q);
     }));
 
     shown = list;
@@ -93,7 +107,6 @@
     tbody.replaceChildren();
     $("empty").textContent = list.length ? "" : "표시할 구직자가 없습니다.";
     const reqCert = new Set(jobTypes.filter((j) => j.qualification_required).map((j) => j.id));
-    const reqTrain = new Set(jobTypes.filter((j) => j.training_required).map((j) => j.id));
     for (const r of list) {
       const tr = document.createElement("tr");
       const nameTd = el("td", r.name);
@@ -386,6 +399,7 @@
   $("cancel").addEventListener("click", () => $("dlg").close());
   $("q").addEventListener("input", render);
   $("view").addEventListener("change", render);
+  for (const id of ["jobF", "dayF", "flagF"]) $(id).addEventListener("change", render);
 
   $("f").addEventListener("submit", async (e) => {
     e.preventDefault();

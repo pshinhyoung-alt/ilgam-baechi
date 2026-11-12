@@ -20,7 +20,8 @@
       </select>
       <input type="date" id="from"> <span style="align-self:center">~</span> <input type="date" id="to">
       <select id="branchSel" hidden></select>
-      <select id="workerSel" title="구직자 개인별 정산"><option value="">전체 구직자</option></select>
+      <input type="search" id="workerQ" placeholder="구직자 이름·전화번호 검색" autocomplete="off" style="min-width:220px">
+      <button type="button" id="workerClear" hidden>검색 지우기</button>
     </div>
     <div class="acts" style="margin-bottom:8px">
       <button type="button" data-p="today">오늘</button>
@@ -48,8 +49,8 @@
   </div>
 
   <div class="card" id="workerCard" hidden>
-    <h2 style="font-size:16px;margin:0 0 4px">구직자 개인별 정산</h2>
-    <div class="muted noprint" style="margin-bottom:6px">조회 기간 전체를 구직자별로 합한 금액입니다. [개인 정산서]를 누르면 그 구직자 한 명의 내역만 보이고, 인쇄·PDF·엑셀도 그 사람 것만 나옵니다.</div>
+    <h2 style="font-size:16px;margin:0 0 4px">구직자 개인별 정산 <span class="muted" id="workerCount"></span></h2>
+    <div class="muted noprint" style="margin-bottom:6px">조회 기간 전체를 구직자별로 합한 금액입니다. 머리글(이름, 지급액 등)을 누르면 정렬되고, 위쪽 검색칸에 이름이나 전화번호를 넣으면 그 구직자만 보입니다. [개인 정산서]를 누르면 한 명의 내역만 보이고, 인쇄·PDF·엑셀도 그 사람 것만 나옵니다.</div>
     <div class="scroll"><table id="workerTable" class="has-act"></table></div>
   </div>
 

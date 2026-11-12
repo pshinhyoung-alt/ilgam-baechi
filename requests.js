@@ -6,7 +6,8 @@
   const canWage = !!me.can_edit_wage;
   const STATUS = { received: "접수", assigning: "배치중", confirmed: "확정", in_progress: "진행중", done: "완료", hold: "보류" };
 
-  let jobTypes = [], branches = [], clients = [], rows = [], shown = [], editing = null, wageTouched = false, syncWage = true, counts = {}, convertFrom = null;
+  let jobTypes = [], branches = [], clients = [], rows = [], shown = [], editing = null, wageTouched = false, syncWage = true, counts = {}, workerNames = {}, convertFrom = null;
+  let clientOnlyId = new URLSearchParams(location.search).get("client") || "";   // 의뢰인 화면에서 넘어온 경우 그 의뢰인 것만
   let settings = { min_hourly_wage: 0, default_radius_m: 300, default_fee_rate: 10, max_fee_rate: null, income_tax_rate: 3, local_tax_rate: 10 };
   const $ = (id) => document.getElementById(id);
 
@@ -68,7 +69,13 @@
 
   $("print").addEventListener("click", () => {
     const q = $("q").value.trim();
-    printPage("인력의뢰 목록 - " + $("view").selectedOptions[0].text + (q ? " (검색: " + q + ")" : ""));
+    const notes = [$("view").selectedOptions[0].text];
+    if ($("jobF").value) notes.push($("jobF").selectedOptions[0].text);
+    if ($("df").value || $("dt").value) notes.push(($("df").value || "") + "~" + ($("dt").value || ""));
+    if ($("lackF").checked) notes.push("인원 부족만");
+    if (clientOnlyId) notes.push($("clientBarName").textContent);
+    if (q) notes.push("검색: " + q);
+    printPage("인력의뢰 목록 - " + notes.join(", "));
   });
 
   async function loadBase() {
@@ -81,6 +88,7 @@
     jobTypes = jt.data || [];
     branches = br.data || [];
     clients = cl.data || [];
+    for (const j of jobTypes) if (j.active !== false) $("jobF").append(new Option(j.name, j.id));
     if (st.data) settings = st.data;
     if (isHq) {
       $("branchRow").hidden = false;
@@ -94,15 +102,24 @@
     if (error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
     rows = data;
     // 인력의뢰별 배치된 인원 수
-    const { data: asg } = await db.from("assignments").select("request_id").not("status", "in", "(cancelled,declined)");
+    // (검색용으로 배치된 구직자 이름도 함께. 이름을 못 가져오면 인원 수만 사용)
+    let { data: asg, error: asgErr } = await db.from("assignments").select("request_id, workers(name)").not("status", "in", "(cancelled,declined)");
+    if (asgErr) ({ data: asg } = await db.from("assignments").select("request_id").not("status", "in", "(cancelled,declined)"));
     counts = {};
-    for (const a of asg || []) counts[a.request_id] = (counts[a.request_id] || 0) + 1;
+    workerNames = {};
+    for (const a of asg || []) {
+      counts[a.request_id] = (counts[a.request_id] || 0) + 1;
+      if (a.workers && a.workers.name) (workerNames[a.request_id] = workerNames[a.request_id] || []).push(a.workers.name);
+    }
     render();
   }
 
   function render() {
     const q = $("q").value.trim().toLowerCase();
     const view = $("view").value;
+    const jf = $("jobF").value, df = $("df").value, dt = $("dt").value, lack = $("lackF").checked;
+    $("clientBar").hidden = !clientOnlyId;
+    if (clientOnlyId) $("clientBarName").textContent = (clients.find((c) => c.id === clientOnlyId) || {}).name || "선택한 의뢰인";
     const clientName = nameMaps.client = Object.fromEntries(clients.map((c) => [c.id, c.name]));
     const jobName = nameMaps.job = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
     const list = sorter(rows.filter((r) => {
@@ -110,8 +127,14 @@
       if (view === "open" && ["done", "hold"].includes(r.status)) return false;
       if (view === "hold" && r.status !== "hold") return false;
       if (view === "done" && r.status !== "done") return false;
+      if (clientOnlyId && r.client_id !== clientOnlyId) return false;
+      if (jf && r.job_type_id !== jf) return false;
+      if (df && r.work_date < df) return false;
+      if (dt && r.work_date > dt) return false;
+      if (lack && (["done", "hold"].includes(r.status) || (counts[r.id] || 0) >= r.headcount)) return false;
       if (!q) return true;
-      return (clientName[r.client_id] || "").toLowerCase().includes(q) || r.address.toLowerCase().includes(q);
+      return [clientName[r.client_id], r.address, jobName[r.job_type_id], r.requirements, (workerNames[r.id] || []).join(" ")]
+        .join("\n").toLowerCase().includes(q);
     }));
 
     shown = list;
@@ -384,6 +407,13 @@
   $("hclose").addEventListener("click", () => $("hdlg").close());
   $("q").addEventListener("input", render);
   $("view").addEventListener("change", render);
+  for (const id of ["jobF", "df", "dt", "lackF"]) $(id).addEventListener("change", render);
+  for (const b of document.querySelectorAll("[data-p]")) b.addEventListener("click", () => {
+    [$("df").value, $("dt").value] = datePreset(b.dataset.p);
+    render();
+  });
+  $("dClear").addEventListener("click", () => { $("df").value = $("dt").value = ""; render(); });
+  $("clientBarX").addEventListener("click", () => { clientOnlyId = ""; history.replaceState(null, "", location.pathname); render(); });
   $("branch").addEventListener("change", () => fillClients($("branch").value));
   $("wage").addEventListener("input", () => { wageTouched = true; updateWarn(); updateWageNote(); updateFee(); });
   $("feeOn").addEventListener("change", () => {

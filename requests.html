@@ -11,11 +11,22 @@
 <header class="top"><h1>인력의뢰 접수</h1><nav id="nav"></nav></header>
 <main>
   <div class="toolbar">
-    <input type="search" id="q" placeholder="의뢰인·현장 주소 검색">
+    <input type="search" id="q" placeholder="의뢰인·현장·직종·요구사항·배치 구직자 검색">
     <select id="view"></select>
     <button id="xlsx">엑셀 내려받기</button>
     <button id="print">인쇄 / PDF</button>
     <button class="primary" id="add">+ 인력의뢰 접수</button>
+  </div>
+  <div class="toolbar" style="align-items:center">
+    <select id="jobF"><option value="">전체 직종</option></select>
+    <input type="date" id="df" title="작업일 시작"> <span>~</span> <input type="date" id="dt" title="작업일 끝">
+    <button type="button" data-p="today">오늘</button>
+    <button type="button" data-p="week">이번 주</button>
+    <button type="button" data-p="month">이번 달</button>
+    <button type="button" data-p="lastmonth">지난 달</button>
+    <button type="button" id="dClear">기간 해제</button>
+    <label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="lackF"> 인원 부족만</label>
+    <span id="clientBar" class="muted" hidden><b id="clientBarName"></b> 의뢰만 보는 중 <button type="button" id="clientBarX">전체 보기</button></span>
   </div>
   <div class="card">
     <div class="scroll">

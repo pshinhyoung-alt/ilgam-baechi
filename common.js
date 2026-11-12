@@ -38,6 +38,23 @@ function saveXlsx(fileBase, sheetName, head, body) {
   XLSX.writeFile(wb, fileBase + "_" + ymd + ".xlsx");
 }
 
+// 기간 버튼용: today / week / month / lastmonth → [시작일, 끝일] ("YYYY-MM-DD")
+function datePreset(name) {
+  const p = (n) => String(n).padStart(2, "0");
+  const iso = (d) => d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  const y = t.getFullYear(), m = t.getMonth();
+  if (name === "today") return [iso(t), iso(t)];
+  if (name === "week") {
+    const a = new Date(t); a.setDate(t.getDate() - ((t.getDay() + 6) % 7));   // 월요일 시작
+    const b = new Date(a); b.setDate(a.getDate() + 6);
+    return [iso(a), iso(b)];
+  }
+  if (name === "lastmonth") return [iso(new Date(y, m - 1, 1)), iso(new Date(y, m, 0))];
+  return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
+}
+
 // 표 머리글(th)을 눌러 정렬. cols: th 순서대로 정렬값을 돌려주는 함수 (정렬 안 할 칸은 null)
 // 돌려받은 함수에 목록을 넣으면 정렬된 새 목록이 나옴. 한 번 더 누르면 반대 방향
 function setupSort(table, cols, rerender) {

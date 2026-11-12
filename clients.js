@@ -5,22 +5,25 @@
   const isHq = me.role === "hq_admin";
 
   let branches = [], rows = [], shown = [], editing = null;
+  let stats = {};   // 의뢰인 id -> { n: 의뢰 건수, last: 마지막 작업일 }
   const $ = (id) => document.getElementById(id);
 
   const views = [["active", "사용 중"]];
   if (isAdmin) views.push(["trash", "휴지통"]);
   for (const [v, label] of views) $("view").append(new Option(label, v));
 
-  // 머리글을 눌러 정렬: 이름/업체명, 전화, 주소, 메모
+  // 머리글을 눌러 정렬: 이름/업체명, 전화, 주소, 메모, 의뢰 건수
+  const nOf = (r) => (stats[r.id] ? stats[r.id].n : 0);
   const sorter = setupSort(document.querySelector("main table"), [
-    (r) => r.name, (r) => digits(r.phone), (r) => r.address || "", (r) => r.memo || "", null,
+    (r) => r.name, (r) => digits(r.phone), (r) => r.address || "", (r) => r.memo || "", nOf, null,
   ], () => render());
+  const reqText = (r) => (stats[r.id] ? stats[r.id].n + "건 · 마지막 " + stats[r.id].last : "의뢰 없음");
 
   // 지금 화면에 보이는 목록(검색·보기 적용)을 엑셀로 / 인쇄·PDF로
   $("xlsx").addEventListener("click", () => {
     if (!shown.length) { alert("내려받을 의뢰인이 없습니다."); return; }
-    saveXlsx("의뢰인", "의뢰인", ["이름/업체명", "전화", "주소", "메모"],
-      shown.map((r) => [r.name, fmtPhone(r.phone), r.address || "", r.memo || ""]));
+    saveXlsx("의뢰인", "의뢰인", ["이름/업체명", "전화", "주소", "메모", "의뢰 건수", "마지막 의뢰일"],
+      shown.map((r) => [r.name, fmtPhone(r.phone), r.address || "", r.memo || "", nOf(r), stats[r.id] ? stats[r.id].last : ""]));
   });
   $("print").addEventListener("click", () => {
     const q = $("q").value.trim();
@@ -39,6 +42,18 @@
     const { data, error } = await db.from("clients").select("*").order("created_at", { ascending: false });
     if (error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
     rows = data;
+    // 의뢰인별 의뢰 건수·마지막 작업일 (휴지통 의뢰 제외, 1000건씩 이어서)
+    stats = {};
+    for (let off = 0; ; off += 1000) {
+      const { data: reqs, error: e2 } = await db.from("job_requests").select("client_id,work_date").is("deleted_at", null).range(off, off + 999);
+      if (e2) break;
+      for (const q of reqs) {
+        const s = stats[q.client_id] || (stats[q.client_id] = { n: 0, last: "" });
+        s.n += 1;
+        if (q.work_date > s.last) s.last = q.work_date;
+      }
+      if (reqs.length < 1000) break;
+    }
     render();
   }
 
@@ -49,7 +64,8 @@
     const list = sorter(rows.filter((r) => {
       if (trash !== !!r.deleted_at) return false;
       if (!q) return true;
-      return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd));
+      return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd))
+        || [r.address, r.memo].join("\n").toLowerCase().includes(q);
     }));
     shown = list;
     const tbody = $("rows");
@@ -57,7 +73,11 @@
     $("empty").textContent = list.length ? "" : "표시할 의뢰인이 없습니다.";
     for (const r of list) {
       const tr = document.createElement("tr");
-      tr.append(el("td", r.name), el("td", fmtPhone(r.phone)), el("td", r.address || ""), el("td", r.memo || ""), actions(r));
+      // 이름·의뢰 건수를 누르면 그 의뢰인의 인력의뢰만 모아 보여 줌
+      const link = (text) => { const a = el("a", text); a.href = "requests.html?client=" + r.id; a.title = "이 의뢰인의 인력의뢰 보기"; return a; };
+      const nameTd = el("td"); nameTd.append(link(r.name));
+      const reqTd = el("td"); if (nOf(r)) reqTd.append(link(reqText(r))); else reqTd.textContent = reqText(r);
+      tr.append(nameTd, el("td", fmtPhone(r.phone)), el("td", r.address || ""), el("td", r.memo || ""), reqTd, actions(r));
       tbody.append(tr);
     }
   }

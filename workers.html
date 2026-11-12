@@ -11,11 +11,20 @@
 <header class="top"><h1>구직자 관리</h1><nav id="nav"></nav></header>
 <main>
   <div class="toolbar">
-    <input type="search" id="q" placeholder="이름·전화번호 검색">
+    <input type="search" id="q" placeholder="이름·전화·지역·직종·메모 검색">
     <select id="view"></select>
     <button id="xlsx">엑셀 내려받기</button>
     <button id="print">인쇄 / PDF</button>
     <button class="primary" id="add">+ 구직자 등록</button>
+  </div>
+  <div class="toolbar" style="align-items:center">
+    <select id="jobF"><option value="">전체 직종</option></select>
+    <select id="dayF"><option value="">전체 요일</option></select>
+    <select id="flagF">
+      <option value="">전체</option>
+      <option value="consent">동의 확인 필요</option>
+      <option value="notrain">자체교육 미이수</option>
+    </select>
   </div>
   <div class="card">
     <div class="scroll">
