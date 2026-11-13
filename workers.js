@@ -264,7 +264,7 @@
     const doc = editing && docs[editing.id] && docs[editing.id][kind];
     $(fileId).value = "";
     if (doc) {
-      box.append(el("span", "등록됨", "tag"));
+      box.append(el("span", "등록됨", "tag"), el("b", doc.file_name || "(파일 이름 기록 없음)"), el("span", (doc.uploaded_at || "").slice(0, 10) + " 올림", "muted"));
       // 신분증은 직원도 열람·제공 가능, 통장 사본은 관리자만
       if (kind !== "bankbook" || isAdmin) box.append(btn("보기", "", () => viewDoc(doc)));
       if (kind !== "bankbook" || isAdmin) box.append(btn("의뢰처에 보내기", "primary", async () => openShare(kind)));
@@ -285,7 +285,7 @@
     const care = new Set(jobTypes.filter((j) => j.show_qualification).map((j) => j.id));
     const selected = [...$("jobs").querySelectorAll("input:checked")].some((cb) => care.has(cb.value));
     const hasDoc = !!(editing && docs[editing.id] && (docs[editing.id].qualification || docs[editing.id].health_check));
-    $("qualBox").hidden = !(selected || hasDoc);
+    $("qualBox").hidden = false;   // 자격증·신체검사서는 모든 구직자가 올릴 수 있음
   }
 
   // 자체교육 칸은 설정에서 '자체교육 필요'로 지정한 직종(예: 간병·돌봄)을 고른 구직자,
@@ -435,11 +435,11 @@
 
     const old = docs[worker.id] && docs[worker.id][kind];
     if (old) {
-      const { error } = await db.from("worker_documents").update({ path }).eq("id", old.id);
+      const { error } = await db.from("worker_documents").update({ path, file_name: file.name.slice(0, 120) }).eq("id", old.id);
       if (error) { await db.storage.from("worker-docs").remove([path]); throw new Error("서류 정보를 바꾸지 못했습니다."); }
       await db.storage.from("worker-docs").remove([old.path]);
     } else {
-      const { error } = await db.from("worker_documents").insert({ worker_id: worker.id, kind, path });
+      const { error } = await db.from("worker_documents").insert({ worker_id: worker.id, kind, path, file_name: file.name.slice(0, 120) });
       if (error) { await db.storage.from("worker-docs").remove([path]); throw new Error("서류 정보를 저장하지 못했습니다."); }
     }
   }
