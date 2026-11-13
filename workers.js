@@ -269,7 +269,7 @@
       if (kind !== "bankbook" || isAdmin) box.append(btn("보기", "", () => viewDoc(doc)));
       if (kind !== "bankbook" || isAdmin) box.append(btn("의뢰처에 보내기", "primary", async () => openShare(kind)));
       if (isAdmin) {
-        box.append(btn("삭제", "danger", () => deleteDoc(doc, label)), el("span", "새 파일을 고르면 교체됩니다.", "muted"));
+        box.append(btn("삭제", "danger", () => deleteDoc(doc, label)), el("span", "저장된 서류입니다. 아래 칸은 새 파일로 바꿀 때만 쓰며, 항상 '선택된 파일 없음'으로 보입니다.", "muted"));
       } else {
         box.append(el("span", kind !== "bankbook" ? "교체·삭제는 관리자만 할 수 있습니다." : "열람·교체는 관리자만 할 수 있습니다.", "muted"));
       }
