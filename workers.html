@@ -122,6 +122,9 @@
     <label class="f">요양보호사 자격증 사본</label>
     <div id="qualStatus" class="acts" style="align-items:center"></div>
     <input type="file" id="qualFile" accept="image/jpeg,image/png,image/webp,application/pdf">
+    <label class="f">신체검사서(건강진단서) 사본</label>
+    <div id="healthStatus" class="acts" style="align-items:center"></div>
+    <input type="file" id="healthFile" accept="image/jpeg,image/png,image/webp,application/pdf">
     </div>
     <div id="shareLog" class="muted" style="margin-top:6px"></div>
     <label class="f">통장 사본</label>
@@ -130,6 +133,7 @@
     <div class="muted" style="margin-top:6px">신분증은 <b>주민등록번호 뒷자리를 가린 사본</b>을 올려 주세요. 파일은 비공개 저장소에 보관되고, 보기·교체·삭제는 관리자만 할 수 있으며 열람 기록이 남습니다. (10MB 이하, 사진 또는 PDF)</div>
     <label class="f"><span class="checks"><label><input type="checkbox" id="consent"> 개인정보 수집·이용 동의를 받았음 (신분증·계좌 포함)</label></span></label>
     <label class="f"><span class="checks"><label><input type="checkbox" id="shareConsent"> 신분증·자격증 등 정보를 의뢰처(요양원·요양병원 등)에 제공하는 것에 동의를 받았음</label></span></label>
+    <label class="f"><span class="checks"><label><input type="checkbox" id="healthConsent"> <b>신체검사서(건강 정보)</b>를 의뢰처에 제공하는 것에 대해 <b>별도로</b> 동의를 받았음</label></span></label>
     <div class="msg" id="err"></div>
     <div class="formbtns">
       <button type="button" id="cancel">취소</button>
@@ -138,27 +142,46 @@
   </form>
 </dialog>
 
-<dialog id="sdlg" style="width:min(460px,94vw)">
-  <h2 id="sTitle">서류 사본 제공</h2>
-  <div class="muted">제공 기록을 남기고 파일을 내려받습니다. 받는 곳에 보낸 뒤에는 내려받은 파일을 컴퓨터에서 지워 주세요.</div>
-  <label class="f" for="shareClient">받는 곳 (의뢰인 목록에서 선택)</label>
-  <select id="shareClient"></select>
-  <label class="f" for="shareName">목록에 없으면 직접 입력 (요양원·요양병원 이름)</label>
-  <input type="text" id="shareName" maxlength="60">
-  <label class="f" for="shareMethod">보내는 방법</label>
-  <select id="shareMethod">
-    <option value="kakao">카카오톡</option>
-    <option value="email">이메일</option>
-    <option value="fax">팩스</option>
-    <option value="print">출력해서 직접 전달</option>
-    <option value="other">기타</option>
-  </select>
-  <label class="f" for="shareMemo">메모 (요청 내용 등)</label>
-  <input type="text" id="shareMemo" maxlength="200">
-  <div class="msg" id="shareErr"></div>
-  <div class="formbtns">
-    <button type="button" id="shareCancel">취소</button>
-    <button type="button" class="primary" id="shareOk">기록하고 내려받기</button>
+<dialog id="sdlg" style="width:min(520px,94vw)">
+  <h2 id="sTitle">서류를 의뢰처에 보내기</h2>
+  <div id="sForm">
+    <div class="muted">보낼 서류를 고르면 서류별로 제공 기록이 남고, <b>기간이 지나면 저절로 닫히는 열람 링크</b>가 만들어집니다. 링크를 문자·메일·카톡에 붙여 넣어 보내세요. (파일을 내 컴퓨터에 저장하지 않아도 됩니다)</div>
+    <label class="f">보낼 서류</label>
+    <div class="checks" id="shareDocs"></div>
+    <label class="f" for="shareClient">받는 곳 (의뢰인 목록에서 선택)</label>
+    <select id="shareClient"></select>
+    <label class="f" for="shareName">목록에 없으면 직접 입력 (요양원·요양병원 이름)</label>
+    <input type="text" id="shareName" maxlength="60">
+    <label class="f" for="shareMethod">보내는 방법</label>
+    <select id="shareMethod">
+      <option value="kakao">카카오톡</option>
+      <option value="email">이메일</option>
+      <option value="sms">문자</option>
+      <option value="fax">팩스</option>
+      <option value="print">출력해서 직접 전달</option>
+      <option value="other">기타</option>
+    </select>
+    <label class="f" for="shareHours">링크 유효 시간</label>
+    <select id="shareHours">
+      <option value="3600">1시간</option>
+      <option value="86400" selected>24시간</option>
+      <option value="259200">3일</option>
+    </select>
+    <label class="f" for="shareMemo">메모 (요청 내용 등)</label>
+    <input type="text" id="shareMemo" maxlength="200">
+    <div class="msg" id="shareErr"></div>
+    <div class="formbtns">
+      <button type="button" id="shareCancel">취소</button>
+      <button type="button" class="primary" id="shareOk">기록하고 링크 만들기</button>
+    </div>
+  </div>
+  <div id="sResult" hidden>
+    <div class="muted">아래 글을 복사해서 보내세요. 링크를 아는 사람은 누구나 기간 안에 열 수 있으니 받는 곳 담당자에게만 보내 주세요.</div>
+    <textarea id="shareText" rows="9" readonly style="width:100%"></textarea>
+    <div class="formbtns">
+      <button type="button" id="shareCopy" class="primary">글 복사</button>
+      <button type="button" id="shareClose">닫기</button>
+    </div>
   </div>
 </dialog>
 

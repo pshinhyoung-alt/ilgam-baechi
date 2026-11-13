@@ -267,7 +267,7 @@
       box.append(el("span", "등록됨", "tag"));
       // 신분증은 직원도 열람·제공 가능, 통장 사본은 관리자만
       if (kind !== "bankbook" || isAdmin) box.append(btn("보기", "", () => viewDoc(doc)));
-      if (kind !== "bankbook") box.append(btn("의뢰처에 제공", "primary", async () => openShare(kind, label)));
+      if (kind !== "bankbook" || isAdmin) box.append(btn("의뢰처에 보내기", "primary", async () => openShare(kind)));
       if (isAdmin) {
         box.append(btn("삭제", "danger", () => deleteDoc(doc, label)), el("span", "새 파일을 고르면 교체됩니다.", "muted"));
       } else {
@@ -284,7 +284,7 @@
   function updateQualVisibility() {
     const care = new Set(jobTypes.filter((j) => j.show_qualification).map((j) => j.id));
     const selected = [...$("jobs").querySelectorAll("input:checked")].some((cb) => care.has(cb.value));
-    const hasDoc = !!(editing && docs[editing.id] && docs[editing.id].qualification);
+    const hasDoc = !!(editing && docs[editing.id] && (docs[editing.id].qualification || docs[editing.id].health_check));
     $("qualBox").hidden = !(selected || hasDoc);
   }
 
@@ -320,6 +320,7 @@
     }
     renderDocBox("id_card", "idStatus", "idFile", "신분증");
     renderDocBox("qualification", "qualStatus", "qualFile", "자격증");
+    renderDocBox("health_check", "healthStatus", "healthFile", "신체검사서");
     renderDocBox("bankbook", "bookStatus", "bookFile", "통장");
     updateQualVisibility();
     updateTrainVisibility();
@@ -332,7 +333,7 @@
   });
 
   // ───────── 신분증 사본 의뢰처 제공 ─────────
-  const METHOD = { kakao: "카카오톡", email: "이메일", fax: "팩스", print: "출력·직접 전달", other: "기타" };
+  const METHOD = { kakao: "카카오톡", email: "이메일", sms: "문자", fax: "팩스", print: "출력·직접 전달", other: "기타" };
 
   async function loadDisclosures() {
     const box = $("shareLog");
@@ -346,18 +347,30 @@
     for (const x of data) {
       const d = new Date(x.sent_at);
       const when = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      box.append(el("div", "· " + when + " [" + (x.kind === "id_card" ? "신분증" : "자격증") + "] " + x.recipient + " (" + METHOD[x.method] + ", " + (x.sent_by_name || "-") + ")" + (x.memo ? " — " + x.memo : "")));
+      box.append(el("div", "· " + when + " [" + (DOC_LABEL[x.kind] || x.kind) + "] " + x.recipient + " (" + METHOD[x.method] + ", " + (x.sent_by_name || "-") + ")" + (x.memo ? " — " + x.memo : "")));
     }
   }
 
-  let shareKind = "id_card";
+  const DOC_LABEL = { id_card: "신분증", qualification: "자격증", health_check: "신체검사서", bankbook: "통장 사본" };
 
-  async function openShare(kind, label) {
-    shareKind = kind;
-    $("sTitle").textContent = label + " 사본 제공";
+  async function openShare(preKind) {
+    const mine = (editing && docs[editing.id]) || {};
+    const kinds = ["id_card", "qualification", "health_check", "bankbook"].filter((k) => mine[k] && (k !== "bankbook" || isAdmin));
     if (!editing || !editing.share_consent) {
-      alert("이 구직자는 " + label + " 사본을 의뢰처에 제공하는 것에 대한 동의가 확인되지 않았습니다.\n동의를 받은 뒤 '의뢰처에 제공하는 것에 동의를 받았음'을 체크하고 저장해 주세요.");
+      alert("이 구직자는 서류를 의뢰처에 제공하는 것에 대한 동의가 확인되지 않았습니다.\n동의를 받은 뒤 '의뢰처에 제공하는 것에 동의를 받았음'을 체크하고 저장해 주세요.");
       return;
+    }
+    const box = $("shareDocs");
+    box.replaceChildren();
+    for (const k of kinds) {
+      const lb = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = k; cb.checked = k === preKind;
+      lb.append(cb, document.createTextNode(" " + DOC_LABEL[k]));
+      box.append(lb);
+    }
+    if (mine.health_check && !editing.health_consent) {
+      box.append(el("div", "※ 신체검사서는 건강 정보라서 '신체검사서 별도 동의'를 체크·저장해야 보낼 수 있습니다.", "muted"));
     }
     const { data: cl } = await db.from("clients").select("id,name,branch_id").is("deleted_at", null).order("name");
     const sel = $("shareClient");
@@ -367,41 +380,49 @@
     $("shareMemo").value = "";
     $("shareMethod").value = "kakao";
     $("shareErr").textContent = "";
+    $("shareOk").disabled = false;
+    $("sForm").hidden = false;
+    $("sResult").hidden = true;
     $("sdlg").showModal();
   }
 
   $("shareCancel").addEventListener("click", () => $("sdlg").close());
+  $("shareClose").addEventListener("click", () => $("sdlg").close());
+  $("shareCopy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("shareText").value); $("shareCopy").textContent = "복사했습니다"; }
+    catch { $("shareText").select(); alert("자동 복사가 안 됩니다. 글을 직접 선택해서 복사해 주세요."); }
+  });
   $("shareOk").addEventListener("click", async () => {
     const clientId = $("shareClient").value || null;
     const name = $("shareName").value.trim();
+    const kinds = [...$("shareDocs").querySelectorAll("input:checked")].map((c) => c.value);
+    if (!kinds.length) { $("shareErr").textContent = "보낼 서류를 하나 이상 골라 주세요."; return; }
     if (!clientId && !name) { $("shareErr").textContent = "받는 곳을 선택하거나 이름을 입력해 주세요."; return; }
     $("shareOk").disabled = true;
     $("shareErr").textContent = "";
-    const { data: path, error } = await db.rpc("record_disclosure", {
-      p_worker: editing.id, p_kind: shareKind, p_client: clientId, p_recipient: name,
-      p_method: $("shareMethod").value, p_memo: $("shareMemo").value.trim(),
-    });
-    if (error) {
-      $("shareOk").disabled = false;
-      $("shareErr").textContent = /[가-힣]/.test(error.message) ? error.message : "기록하지 못했습니다.";
-      return;
+    const secs = Number($("shareHours").value);
+    const lines = [];
+    const failed = [];
+    for (const kind of kinds) {
+      const { data: path, error } = await db.rpc("record_disclosure", {
+        p_worker: editing.id, p_kind: kind, p_client: clientId, p_recipient: name,
+        p_method: $("shareMethod").value, p_memo: $("shareMemo").value.trim(),
+      });
+      if (error) { failed.push(DOC_LABEL[kind] + ": " + (/[가-힣]/.test(error.message) ? error.message : "기록하지 못했습니다.")); continue; }
+      const { data, error: e2 } = await db.storage.from("worker-docs").createSignedUrl(path, secs);
+      if (e2 || !data) { failed.push(DOC_LABEL[kind] + ": 제공 기록은 남았지만 링크를 만들지 못했습니다."); continue; }
+      lines.push("· " + DOC_LABEL[kind] + ": " + data.signedUrl);
     }
-    const ext = (path.split(".").pop() || "jpg");
-    const { data, error: e2 } = await db.storage.from("worker-docs").createSignedUrl(path, 60, { download: (shareKind === "id_card" ? "신분증_" : "자격증_") + editing.name + "." + ext });
-    $("shareOk").disabled = false;
-    if (e2 || !data) {
-      $("shareErr").textContent = "제공 기록은 남았지만 파일을 내려받지 못했습니다. [보기]로 다시 열어 주세요.";
-      await loadDisclosures();
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = data.signedUrl;
-    a.download = "";
-    document.body.append(a);
-    a.click();
-    a.remove();
-    $("sdlg").close();
     await loadDisclosures();
+    $("shareOk").disabled = false;
+    if (failed.length) $("shareErr").textContent = failed.join(" / ");
+    if (!lines.length) return;
+    const hrs = secs >= 86400 ? secs / 86400 + "일" : secs / 3600 + "시간";
+    $("shareText").value = "[일잡코리아] " + editing.name + " 님 서류입니다. 아래 링크는 " + hrs + " 동안만 열립니다.\n"
+      + lines.join("\n") + "\n※ 개인정보가 담긴 서류입니다. 채용 확인 외 용도로 사용하지 말고, 확인 후 저장하신 파일은 삭제해 주세요.";
+    $("shareCopy").textContent = "글 복사";
+    $("sForm").hidden = true;
+    $("sResult").hidden = false;
   });
 
   async function uploadDoc(worker, kind, file) {
@@ -433,6 +454,7 @@
     $("memo").value = r ? r.memo || "" : "";
     $("consent").checked = r ? r.consent_confirmed : false;
     $("shareConsent").checked = r ? !!r.share_consent : false;
+    $("healthConsent").checked = r ? !!r.health_consent : false;
     $("trainDone").checked = r ? !!r.training_done : false;
     $("trainDate").value = r && r.training_date ? r.training_date : "";
     $("noshowBox").hidden = !(isAdmin && r);
@@ -497,6 +519,7 @@
       memo: $("memo").value.trim() || null,
       consent_confirmed: $("consent").checked,
       share_consent: $("shareConsent").checked,
+      health_consent: $("healthConsent").checked,
       training_done: trainDone,
       training_date: trainDone ? trainDate : null,
       is_foreign: foreign,
@@ -549,8 +572,8 @@
       const { error } = await db.rpc("set_worker_bank", { p_worker: saved.id, p_bank: bank.name, p_number: bank.no, p_holder: bank.holder });
       if (error) problems.push(/[가-힣]/.test(error.message) ? error.message : "계좌를 저장하지 못했습니다.");
     }
-    for (const [kind, fileId, label] of [["id_card", "idFile", "신분증"], ["qualification", "qualFile", "자격증"], ["bankbook", "bookFile", "통장 사본"]]) {
-      if (kind === "qualification" && $("qualBox").hidden) continue;   // 숨겨진 칸의 파일은 올리지 않음
+    for (const [kind, fileId, label] of [["id_card", "idFile", "신분증"], ["qualification", "qualFile", "자격증"], ["health_check", "healthFile", "신체검사서"], ["bankbook", "bookFile", "통장 사본"]]) {
+      if ((kind === "qualification" || kind === "health_check") && $("qualBox").hidden) continue;   // 숨겨진 칸의 파일은 올리지 않음
       const file = $(fileId).files[0];
       if (!file) continue;
       try { await uploadDoc(saved, kind, file); } catch (err) { problems.push(label + ": " + err.message); }
