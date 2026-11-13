@@ -35,6 +35,25 @@
       <tbody id="suspectRows"></tbody>
     </table>
   </div>
+  <div class="card" id="dashCard" hidden>
+    <h2>지점별 현황</h2>
+    <div class="toolbar" style="align-items:center">
+      <button data-p="today">오늘</button>
+      <button data-p="week">이번 주</button>
+      <button data-p="month">이번 달</button>
+      <button data-p="lastmonth">지난 달</button>
+      <span class="muted" id="dashRange"></span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>지점</th><th>인력의뢰</th><th>진행 중</th><th>완료</th><th>보류</th><th>일한 인원(연인원)</th><th>일당 합계</th><th>소개수수료</th><th>의뢰인 문제</th></tr></thead>
+        <tbody id="dashRows"></tbody>
+        <tfoot id="dashFoot"></tfoot>
+      </table>
+    </div>
+    <div class="muted" id="dashNote">일당 합계·소개수수료·일한 인원은 작업을 마치고 <b>완료</b> 처리된 배치만 셉니다. 인력의뢰 건수는 작업일 기준이며 삭제한 의뢰는 빠집니다.</div>
+    <div class="msg" id="dashErr"></div>
+  </div>
   <div class="card" id="staffCard" hidden>
     <h2>직원 목록</h2>
     <table>
@@ -92,7 +111,91 @@
     if (me.role === "branch_staff") return;
     document.getElementById("navSettings").hidden = false;
     document.getElementById("navSettlement").hidden = false;
+    document.getElementById("dashCard").hidden = false;
+    loadDash("month");
     await loadStaff(me);
+  }
+
+  // ----- 지점별 현황 (본사 관리자: 모든 지점 / 지점장: 자기 지점) -----
+  const won = (n) => Number(n || 0).toLocaleString("ko-KR") + "원";
+  function dashRange(name) {
+    const p = (n) => String(n).padStart(2, "0");
+    const iso = (d) => d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const y = t.getFullYear(), m = t.getMonth();
+    if (name === "today") return [iso(t), iso(t)];
+    if (name === "week") {
+      const a = new Date(t); a.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+      const b = new Date(a); b.setDate(a.getDate() + 6);
+      return [iso(a), iso(b)];
+    }
+    if (name === "lastmonth") return [iso(new Date(y, m - 1, 1)), iso(new Date(y, m, 0))];
+    return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
+  }
+  document.querySelectorAll("#dashCard [data-p]").forEach((b) => b.addEventListener("click", () => loadDash(b.dataset.p)));
+
+  async function loadDash(preset) {
+    const [from, to] = dashRange(preset);
+    document.getElementById("dashRange").textContent = from + " ~ " + to;
+    const err = document.getElementById("dashErr");
+    err.textContent = "";
+    document.querySelectorAll("#dashCard [data-p]").forEach((b) => b.classList.toggle("primary", b.dataset.p === preset));
+
+    const reqs = [];
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await db.from("job_requests").select("branch_id,status")
+        .is("deleted_at", null).gte("work_date", from).lte("work_date", to).range(off, off + 999);
+      if (error) { err.textContent = "인력의뢰를 불러오지 못했습니다."; return; }
+      reqs.push(...data);
+      if (data.length < 1000) break;
+    }
+    const { data: rows, error: e2 } = await db.rpc("settlement_rows", { p_from: from, p_to: to, p_branch: null, p_include_out: false, p_with_bank: false });
+    if (e2) { err.textContent = "정산 내역을 불러오지 못했습니다."; return; }
+    const { data: brs } = await db.from("branches").select("id,name").order("name");
+
+    const by = new Map();
+    const get = (id, name) => {
+      if (!by.has(id)) by.set(id, { name, req: 0, going: 0, done: 0, hold: 0, people: 0, wage: 0, fee: 0, problem: 0 });
+      return by.get(id);
+    };
+    for (const b of brs || []) get(b.id, b.name);
+    for (const r of reqs) {
+      const x = get(r.branch_id, "-");
+      x.req++;
+      if (["assigning", "confirmed", "in_progress"].includes(r.status)) x.going++;
+      else if (r.status === "done") x.done++;
+      else if (r.status === "hold") x.hold++;
+    }
+    for (const s of rows) {
+      const x = get(s.branch_id, s.branch_name);
+      x.people++; x.wage += s.wage; x.fee += s.fee;
+      if (s.client_confirm === "problem") x.problem++;
+    }
+
+    const tbody = document.getElementById("dashRows");
+    tbody.replaceChildren();
+    const tot = { req: 0, going: 0, done: 0, hold: 0, people: 0, wage: 0, fee: 0, problem: 0 };
+    const line = (x, cls) => {
+      const tr = document.createElement("tr");
+      const cells = [x.name, x.req + "건", x.going + "건", x.done + "건", x.hold + "건", x.people + "명", won(x.wage), won(x.fee), x.problem ? x.problem + "건" : "-"];
+      cells.forEach((c, i) => { const td = el("td", c); if (i >= 1) td.style.textAlign = "right"; if (cls) td.style.fontWeight = "700"; tr.append(td); });
+      return tr;
+    };
+    for (const x of by.values()) {
+      if (!x.req && !x.people) continue;
+      for (const k of Object.keys(tot)) tot[k] += x[k];
+      tbody.append(line(x));
+    }
+    const foot = document.getElementById("dashFoot");
+    foot.replaceChildren();
+    if (!tbody.children.length) {
+      const tr = document.createElement("tr");
+      const td = el("td", "이 기간에는 인력의뢰가 없습니다."); td.colSpan = 9; td.className = "muted";
+      tr.append(td); tbody.append(tr);
+    } else {
+      tot.name = "합계";
+      foot.append(line(tot, true));
+    }
   }
 
   // 노쇼 의심 목록 (기능이 아직 없거나 불러오지 못하면 조용히 숨김)
