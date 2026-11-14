@@ -380,7 +380,9 @@
     $("shareMemo").value = "";
     $("shareMethod").value = "kakao";
     $("shareErr").textContent = "";
+    $("smsPhone").value = "";
     $("shareOk").disabled = false;
+    $("smsSend").disabled = false;
     $("sForm").hidden = false;
     $("sResult").hidden = true;
     $("sdlg").showModal();
@@ -392,6 +394,31 @@
     try { await navigator.clipboard.writeText($("shareText").value); $("shareCopy").textContent = "복사했습니다"; }
     catch { $("shareText").select(); alert("자동 복사가 안 됩니다. 글을 직접 선택해서 복사해 주세요."); }
   });
+  // 문자로 바로 보내기: 서버 함수(send-sms)가 기록·링크 만들기·문자 발송을 한꺼번에 처리
+  $("smsSend").addEventListener("click", async () => {
+    const clientId = $("shareClient").value || null;
+    const name = $("shareName").value.trim() || ($("shareClient").selectedOptions[0] ? $("shareClient").selectedOptions[0].text : "");
+    const kinds = [...$("shareDocs").querySelectorAll("input:checked")].map((c) => c.value);
+    const phone = digits($("smsPhone").value);
+    if (!kinds.length) { $("shareErr").textContent = "보낼 서류를 하나 이상 골라 주세요."; return; }
+    if (!clientId && !$("shareName").value.trim()) { $("shareErr").textContent = "받는 곳을 선택하거나 이름을 입력해 주세요."; return; }
+    if (!/^01[016789]\d{7,8}$/.test(phone)) { $("shareErr").textContent = "받는 사람 휴대폰 번호를 확인해 주세요."; return; }
+    if (!confirm(fmtPhone(phone) + " 번호로 " + kinds.map((k) => DOC_LABEL[k]).join(", ") + " 열람 링크를 문자로 보냅니다.\n번호가 맞는지 다시 확인해 주세요. 보낼까요?")) return;
+    $("smsSend").disabled = true;
+    $("shareOk").disabled = true;
+    $("shareErr").textContent = "보내는 중...";
+    const { data, error } = await db.functions.invoke("send-sms", {
+      body: { worker_id: editing.id, kinds, client_id: clientId, recipient: name, phone, seconds: Number($("shareHours").value), memo: $("shareMemo").value.trim() },
+    });
+    $("smsSend").disabled = false;
+    $("shareOk").disabled = false;
+    await loadDisclosures();
+    if (error || !data || !data.results) { $("shareErr").textContent = "문자를 보내지 못했습니다. 설정이 끝났는지 확인해 주세요."; return; }
+    const ok = data.results.filter((r) => r.ok).map((r) => DOC_LABEL[r.kind]);
+    const bad = data.results.filter((r) => !r.ok).map((r) => DOC_LABEL[r.kind] + ": " + r.message);
+    $("shareErr").textContent = (ok.length ? ok.join(", ") + " 문자를 보냈습니다. " : "") + bad.join(" / ");
+  });
+
   $("shareOk").addEventListener("click", async () => {
     const clientId = $("shareClient").value || null;
     const name = $("shareName").value.trim();
