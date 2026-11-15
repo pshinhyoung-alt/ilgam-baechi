@@ -165,6 +165,7 @@
         el("td", clientName[r.client_id] || "-"),
         jobTd,
         el("td", (counts[r.id] || 0) + "/" + r.headcount + "명"),
+        el("td", (workerNames[r.id] || []).join(", ") || "-"),
         addrTd, el("td", won(r.offered_wage)), wageTd, el("td", r.radius_m + "m"), stTd, actions(r));
       tbody.append(tr);
     }
@@ -176,10 +177,10 @@
     const clientName = Object.fromEntries(clients.map((c) => [c.id, c.name]));
     const jobName = Object.fromEntries(jobTypes.map((j) => [j.id, j.name]));
     saveXlsx("인력의뢰", "인력의뢰",
-      ["작업일", "시작", "종료", "의뢰인", "직종", "필요 인원", "배치 인원", "현장 주소", "제시 단가", "확정 단가", "출근 반경(m)", "상태", "보류 사유"],
+      ["작업일", "시작", "종료", "의뢰인", "직종", "필요 인원", "배치 인원", "배치 구직자", "현장 주소", "제시 단가", "확정 단가", "출근 반경(m)", "상태", "보류 사유"],
       shown.map((r) => [
         r.work_date, hhmm(r.start_time), hhmm(r.end_time), clientName[r.client_id] || "", jobName[r.job_type_id] || "(삭제된 직종)",
-        r.headcount, counts[r.id] || 0, r.address, r.offered_wage, r.wage, r.radius_m,
+        r.headcount, counts[r.id] || 0, (workerNames[r.id] || []).join(", "), r.address, r.offered_wage, r.wage, r.radius_m,
         r.deleted_at ? "휴지통" : STATUS[r.status], r.status === "hold" ? r.hold_reason || "" : "",
       ]));
   });
