@@ -1,0 +1,17 @@
+{
+  "id": "./admin.html",
+  "name": "일잡코리아 인력배치",
+  "short_name": "인력배치",
+  "description": "일잡코리아 인력 배치·출근·정산 관리 (직원 전용)",
+  "lang": "ko",
+  "start_url": "./admin.html?source=app",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6fc",
+  "theme_color": "#2f5bea",
+  "icons": [
+    { "src": "icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/app-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

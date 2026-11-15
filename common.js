@@ -3,6 +3,9 @@ const cfg = window.APP_CONFIG;
 const db = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
 const ROLE = { hq_admin: "본사 관리자", branch_manager: "지점장", branch_staff: "지점 직원" };
 
+// 손님용 홈페이지의 관리자 화면 (접수 받을 곳·상호·전화·주소 등을 고치는 곳)
+const HOMEPAGE_ADMIN_URL = "https://pshinhyoung-alt.github.io/iljob-gangwon/admin.html";
+
 function el(tag, text, cls) {
   const n = document.createElement(tag);
   if (text !== undefined) n.textContent = text;
@@ -121,12 +124,21 @@ function renderNav(current, me) {
     if (href === current) a.className = "cur";
     nav.append(a);
   }
+  if (me && me.role === "hq_admin") {
+    const hp = el("a", "홈페이지 관리");
+    hp.href = HOMEPAGE_ADMIN_URL;
+    hp.target = "_blank";
+    hp.rel = "noopener";
+    hp.title = "손님용 홈페이지의 관리자 화면 (상호·전화·주소, 접수 받을 곳)";
+    nav.append(hp);
+  }
   const out = el("button", "로그아웃");
   out.addEventListener("click", async () => {
     await db.auth.signOut();
     location.replace("index.html");
   });
   nav.append(out);
+  if (window.addInstallBtn) window.addInstallBtn();
 }
 
 // 로그인 확인 + 내 직원 정보 가져오기. 문제가 있으면 안내 후 null

@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/app-apple-180.png">
+<meta name="theme-color" content="#2f5bea">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="인력배치">
+<script src="install.js"></script>
 <title>일잡코리아 인력배치 - 관리</title>
 <link rel="stylesheet" href="common.css">
 <style>
@@ -15,13 +23,14 @@
 <body>
 <header class="top">
   <h1>일잡코리아 인력배치</h1>
-  <nav>
+  <nav id="nav">
     <a href="inquiries.html">접수함</a>
     <a href="requests.html">인력의뢰</a>
     <a href="workers.html">구직자</a>
     <a href="clients.html">의뢰인</a>
     <a href="settlement.html" id="navSettlement" hidden>정산</a>
     <a href="settings.html" id="navSettings" hidden>설정</a>
+    <a href="https://pshinhyoung-alt.github.io/iljob-gangwon/admin.html" id="navHomepage" target="_blank" rel="noopener" hidden title="손님용 홈페이지의 관리자 화면 (상호·전화·주소, 접수 받을 곳)">홈페이지 관리</a>
     <button id="logout">로그아웃</button>
   </nav>
 </header>
@@ -110,6 +119,7 @@
     await loadSuspects();
     if (me.role === "branch_staff") return;
     document.getElementById("navSettings").hidden = false;
+    if (me.role === "hq_admin") document.getElementById("navHomepage").hidden = false;
     document.getElementById("navSettlement").hidden = false;
     document.getElementById("dashCard").hidden = false;
     loadDash("month");
