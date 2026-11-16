@@ -89,13 +89,17 @@
       <input type="email" id="sfEmail" maxlength="200" autocomplete="off" style="width:100%">
     </div>
     <div id="sfOrgBox">
-      <label class="f" for="sfBranch">지점</label>
-      <select id="sfBranch" style="width:100%"></select>
       <label class="f" for="sfRole">권한</label>
       <select id="sfRole" style="width:100%">
         <option value="branch_staff">지점 직원</option>
         <option value="branch_manager">지점장 (자기 지점의 정산·설정까지)</option>
+        <option value="hq_admin">본사 관리자 (모든 지점 · 직원 관리까지)</option>
       </select>
+      <div id="sfBranchBox">
+        <label class="f" for="sfBranch">지점</label>
+        <select id="sfBranch" style="width:100%"></select>
+      </div>
+      <div class="muted" id="sfHqWarn" hidden style="color:#b3261e">본사 관리자는 모든 지점의 구직자·의뢰인·정산·직원 정보를 보고 바꿀 수 있습니다. 꼭 믿을 수 있는 분에게만 주세요.</div>
     </div>
     <label class="f"><input type="checkbox" id="sfWage"> 단가·수수료 수정 허용</label>
     <div class="msg" id="sfErr"></div>
@@ -375,14 +379,14 @@
     const $ = (id) => document.getElementById(id);
     $("sfBranch").replaceChildren(...staffBranches.map((b) => new Option(b.name, b.id)));
     $("sfTitle").textContent = r ? "직원 정보 수정" : "직원 추가";
-    const hq = !!r && r.role === "hq_admin";
-    $("sfHint").textContent = hq
-      ? "본사 관리자는 이름과 단가·수수료 수정 허용만 고칠 수 있습니다. (권한·지점을 잘못 바꾸면 본사 화면에 들어올 수 없게 되므로 막아 두었습니다)"
+    const self = !!r && r.user_id === staffMe.user_id;   // 본인은 권한·지점을 못 바꿈 (실수로 본사 권한을 잃지 않도록)
+    $("sfHint").textContent = self
+      ? "본인 계정은 이름과 단가·수수료 수정 허용만 고칠 수 있습니다. (권한·지점을 잘못 바꾸면 본사 화면에 들어올 수 없게 되므로 막아 두었습니다)"
       : r
       ? "로그인 이메일은 바꿀 수 없습니다. 이메일을 바꿔야 하면 새로 추가하고 이 계정은 [사용 중지]하세요."
       : "로그인할 이메일과 이름을 넣으면 계정이 만들어지고 임시 비밀번호가 나옵니다. 직원이 실제로 받는 이메일을 쓰면, 비밀번호를 잊었을 때 메일로도 다시 정할 수 있습니다.";
     $("sfEmailBox").hidden = !!r;
-    $("sfOrgBox").hidden = hq;
+    $("sfOrgBox").hidden = self;
     $("sfName").value = r ? r.name : "";
     $("sfEmail").value = "";
     if (r && r.branch_id) $("sfBranch").value = r.branch_id;
@@ -390,8 +394,16 @@
     $("sfWage").checked = r ? !!r.can_edit_wage : false;
     $("sfSave").textContent = r ? "저장" : "계정 만들기";
     $("sfErr").textContent = "";
+    syncRoleBox();
     staffDlg.showModal();
   }
+  // 본사 관리자를 고르면 지점 칸을 숨기고 주의 문구를 보여 줌
+  function syncRoleBox() {
+    const hq = document.getElementById("sfRole").value === "hq_admin";
+    document.getElementById("sfBranchBox").hidden = hq;
+    document.getElementById("sfHqWarn").hidden = !hq;
+  }
+  document.getElementById("sfRole").addEventListener("change", syncRoleBox);
   document.getElementById("addStaffBtn").addEventListener("click", () => openStaffDlg(null));
   document.getElementById("sfCancel").addEventListener("click", () => staffDlg.close());
   document.getElementById("staffForm").addEventListener("submit", async (e) => {
@@ -401,13 +413,16 @@
     const email = document.getElementById("sfEmail").value.trim();
     err.textContent = "";
     if (!name) { err.textContent = "이름을 입력해 주세요."; return; }
+    const role = document.getElementById("sfRole").value;
+    const toHq = role === "hq_admin" && (!staffEditing || staffEditing.role !== "hq_admin");
+    if (toHq && !confirm(name + " 님을 본사 관리자로 " + (staffEditing ? "바꿉니다" : "만듭니다") + ".\n본사 관리자는 모든 지점의 구직자·의뢰인·정산·직원 정보를 보고 바꿀 수 있습니다.\n정말 진행할까요?")) return;
     if (staffEditing) {
       const save = document.getElementById("sfSave");
       save.disabled = true;
       const patch = { name, can_edit_wage: document.getElementById("sfWage").checked };
-      if (staffEditing.role !== "hq_admin") {   // 본사 관리자의 권한·지점은 바꾸지 않음
-        patch.branch_id = document.getElementById("sfBranch").value;
-        patch.role = document.getElementById("sfRole").value;
+      if (staffEditing.user_id !== staffMe.user_id) {   // 본인의 권한·지점은 바꾸지 않음
+        patch.role = role;
+        patch.branch_id = role === "hq_admin" ? null : document.getElementById("sfBranch").value;
       }
       const { error } = await db.from("staff").update(patch).eq("user_id", staffEditing.user_id);
       save.disabled = false;
@@ -423,8 +438,8 @@
     save.disabled = true;
     const { msg } = await callAdminFn({
       action: "create_staff", name, email, password: pw,
-      branch_id: document.getElementById("sfBranch").value,
-      role: document.getElementById("sfRole").value,
+      branch_id: role === "hq_admin" ? "" : document.getElementById("sfBranch").value,
+      role,
       can_edit_wage: document.getElementById("sfWage").checked,
     });
     save.disabled = false;
