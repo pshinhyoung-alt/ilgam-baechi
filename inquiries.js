@@ -27,11 +27,12 @@
   const when = (iso) => {
     const d = new Date(iso);
     const p = (n) => String(n).padStart(2, "0");
-    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    const year = d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + "/" : "";   // 올해가 아니면 연도도 표시
+    return year + p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   };
 
   async function load() {
-    const { data, error } = await db.from("inquiries").select("*").order("updated_at", { ascending: false }).limit(500);
+    const { data, error } = await selectAll(() => db.from("inquiries").select("*").order("updated_at", { ascending: false }).order("id"));
     if (error) {
       $("empty").textContent = "접수를 불러오지 못했습니다. (서버 SQL 19번·20번이 적용되었는지 확인하세요)";
       return;
