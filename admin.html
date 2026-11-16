@@ -69,8 +69,25 @@
       <thead><tr><th>이름</th><th>권한</th><th>단가·수수료 수정</th><th id="actCol"></th></tr></thead>
       <tbody id="staffRows"></tbody>
     </table>
+    <div class="muted" id="staffNote" hidden>[비밀번호 재설정]을 누르면 임시 비밀번호가 만들어집니다. 직원에게 직접(전화·대면) 알려 주시면, 직원은 다음 로그인 때 자기 비밀번호를 새로 정합니다.</div>
   </div>
 </main>
+
+<dialog id="pwDlg" style="width:min(420px,94vw)">
+  <form id="pwForm">
+    <h2>비밀번호 변경</h2>
+    <div class="muted" id="pwHint"></div>
+    <label class="f" for="pw1">새 비밀번호</label>
+    <input type="password" id="pw1" style="width:100%" autocomplete="new-password" minlength="8" maxlength="72" required>
+    <label class="f" for="pw2">새 비밀번호 확인</label>
+    <input type="password" id="pw2" style="width:100%" autocomplete="new-password" minlength="8" maxlength="72" required>
+    <div class="msg" id="pwErr"></div>
+    <div class="formbtns">
+      <button type="button" id="pwCancel">취소</button>
+      <button type="submit" class="primary" id="pwSave">바꾸기</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -115,6 +132,12 @@
       el("div", "소속: " + branchName),
       el("div", "단가·수수료 수정: " + (me.can_edit_wage ? "가능" : "불가"), "muted")
     );
+    const pwBtn = el("button", "비밀번호 변경");
+    pwBtn.style.marginTop = "10px";
+    pwBtn.addEventListener("click", () => openPw(false));
+    meBox.append(pwBtn);
+    // 본사에서 임시 비밀번호를 받아 로그인한 경우: 먼저 새 비밀번호를 정하게 함
+    if (s.session.user.user_metadata && s.session.user.user_metadata.must_change_password) openPw(true);
 
     await loadSuspects();
     if (me.role === "branch_staff") return;
@@ -237,6 +260,7 @@
     const isHq = me.role === "hq_admin";
     document.getElementById("staffCard").hidden = false;
     document.getElementById("actCol").textContent = isHq ? "변경" : "";
+    document.getElementById("staffNote").hidden = !isHq;
 
     const tbody = document.getElementById("staffRows");
     tbody.replaceChildren();
@@ -253,11 +277,76 @@
           loadStaff(me);
         });
         act.append(b);
+        if (r.user_id !== me.user_id) {
+          const rb = el("button", "비밀번호 재설정");
+          rb.style.marginLeft = "6px";
+          rb.addEventListener("click", () => resetStaffPw(r, rb));
+          act.append(rb);
+        }
       }
       tr.append(act);
       tbody.append(tr);
     }
   }
+
+  // ----- 본사 관리자: 직원 비밀번호를 임시 비밀번호로 다시 정해 주기 (서버 기능 admin-set-password) -----
+  function tempPassword() {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";   // 헷갈리는 글자(0·O·1·l·I) 제외
+    return Array.from(crypto.getRandomValues(new Uint32Array(10)), (n) => chars[n % chars.length]).join("");
+  }
+  async function resetStaffPw(r, btn) {
+    if (!confirm(r.name + " 님의 비밀번호를 새 임시 비밀번호로 바꿉니다.\n지금 쓰던 비밀번호는 더 이상 쓸 수 없고, 직원은 다음 로그인 때 자기 비밀번호를 새로 정해야 합니다.\n계속할까요?")) return;
+    const pw = tempPassword();
+    btn.disabled = true;
+    const { data, error } = await db.functions.invoke("admin-set-password", { body: { user_id: r.user_id, password: pw } });
+    btn.disabled = false;
+    if (error || !data || !data.ok) {
+      let msg = data && data.error;
+      if (!msg && error && error.context && typeof error.context.json === "function") {
+        try { msg = (await error.context.json()).error; } catch (_) {}
+      }
+      alert(msg || "비밀번호를 바꾸지 못했습니다. Supabase 에 서버 기능 admin-set-password 가 올라가 있는지 확인해 주세요.");
+      return;
+    }
+    try { await navigator.clipboard.writeText(pw); } catch (_) {}
+    prompt(r.name + " 님의 임시 비밀번호입니다. (복사해 두었습니다)\n전화나 대면으로 직접 알려 주세요. 카톡·문자에 남기지 않는 것이 안전합니다.", pw);
+  }
+
+  // ----- 내 비밀번호 변경 (임시 비밀번호로 로그인한 경우에는 꼭 바꾸게 함) -----
+  const pwDlg = document.getElementById("pwDlg");
+  let pwForced = false;
+  function openPw(forced) {
+    pwForced = forced;
+    document.getElementById("pwCancel").hidden = forced;
+    document.getElementById("pwHint").textContent = forced
+      ? "본사에서 정해 준 임시 비밀번호로 로그인하셨습니다. 앞으로 사용할 새 비밀번호를 정해 주세요. (8자 이상)"
+      : "앞으로 사용할 비밀번호를 정해 주세요. (8자 이상)";
+    document.getElementById("pw1").value = "";
+    document.getElementById("pw2").value = "";
+    document.getElementById("pwErr").textContent = "";
+    pwDlg.showModal();
+  }
+  pwDlg.addEventListener("cancel", (e) => { if (pwForced) e.preventDefault(); });
+  document.getElementById("pwCancel").addEventListener("click", () => pwDlg.close());
+  document.getElementById("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("pwErr");
+    const pw = document.getElementById("pw1").value;
+    err.textContent = "";
+    if (pw.length < 8) { err.textContent = "비밀번호는 8자 이상으로 정해 주세요."; return; }
+    if (pw !== document.getElementById("pw2").value) { err.textContent = "두 비밀번호가 서로 다릅니다."; return; }
+    const save = document.getElementById("pwSave");
+    save.disabled = true;
+    const { error } = await db.auth.updateUser({ password: pw, data: { must_change_password: false } });
+    save.disabled = false;
+    if (error) {
+      err.textContent = /different from the old/i.test(error.message) ? "이전과 다른 비밀번호를 입력해 주세요." : "비밀번호를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      return;
+    }
+    pwForced = false;
+    pwDlg.close();
+    alert("비밀번호를 바꿨습니다. 다음 로그인부터 새 비밀번호를 쓰세요.");
+  });
 
   init();
 </script>
