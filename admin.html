@@ -84,12 +84,12 @@
     </div>
     <div class="scroll">
       <table>
-        <thead><tr><th>지점 이름</th><th>지역</th><th>전화</th><th>직원</th><th></th></tr></thead>
+        <thead><tr><th>지점 이름</th><th>지역</th><th>전화</th><th>직원</th><th>홈페이지</th><th></th></tr></thead>
         <tbody id="branchRows"></tbody>
       </table>
     </div>
     <div class="muted">지점을 추가한 뒤, 위 직원 목록의 [+ 직원 추가]에서 그 지점의 <b>지점장</b> 계정을 만들어 주세요. 지점장은 같은 프로그램 주소로 로그인하면 <b>자기 지점의 자료만</b> 보입니다. 구직자·의뢰인·인력의뢰는 지점마다 따로 쌓이고, 본사 관리자는 모든 지점을 봅니다.</div>
-    <div class="muted" id="mainBranchNote">맨 위 첫 지점(본점)의 이름은 홈페이지 관리의 <b>상호·지점명</b>과 연결되어 있어 거기서 바꿉니다. 홈페이지에서 들어오는 접수는 현재 첫 지점으로 들어갑니다.</div>
+    <div class="muted" id="mainBranchNote">맨 위 첫 지점(본점)의 이름은 홈페이지 관리의 <b>상호·지점명</b>과 연결되어 있어 거기서 바꿉니다. 기본 홈페이지(본점 주소)의 접수는 첫 지점으로 들어가고, 지점 홈페이지 주소(주소 코드)로 들어온 접수는 그 지점으로 들어갑니다.</div>
   </div>
 </main>
 
@@ -134,6 +134,34 @@
     <input type="text" id="bfRegion" maxlength="40" placeholder="예: 강원도 춘천" style="width:100%">
     <label class="f" for="bfPhone">지점 전화번호</label>
     <input type="tel" id="bfPhone" maxlength="20" placeholder="예: 033-000-0000" style="width:100%">
+    <div id="bfSiteBox" style="margin-top:14px;padding-top:6px;border-top:1px solid var(--line)">
+      <div style="font-weight:700;margin-top:8px">지점 홈페이지 (선택)</div>
+      <div class="muted">주소 코드를 넣으면 이 지점 전용 홈페이지 주소가 생기고, 그 홈페이지의 접수는 이 지점 접수함으로 들어옵니다. 코드를 비워 두면 지점 홈페이지 없이 운영합니다. 전화번호는 위 지점 전화번호가 홈페이지에도 쓰입니다.</div>
+      <label class="f" for="bfCode">홈페이지 주소 코드 (영문 소문자·숫자·하이픈, 2~30자)</label>
+      <input type="text" id="bfCode" maxlength="30" placeholder="예: chuncheon" autocapitalize="none" style="width:100%">
+      <div id="bfSiteFields" hidden>
+        <label class="f" for="bfBrand">상호 *</label>
+        <input type="text" id="bfBrand" maxlength="40" placeholder="예: 일잡코리아" style="width:100%">
+        <label class="f" for="bfLabel">지점명</label>
+        <input type="text" id="bfLabel" maxlength="30" placeholder="예: 춘천지점 (상호 뒤에 붙음)" style="width:100%">
+        <label class="f" for="bfCeo">대표자 *</label>
+        <input type="text" id="bfCeo" maxlength="30" style="width:100%">
+        <label class="f" for="bfAddr">주소 *</label>
+        <input type="text" id="bfAddr" maxlength="100" style="width:100%">
+        <label class="f" for="bfArea">서비스 지역 *</label>
+        <input type="text" id="bfArea" maxlength="60" placeholder="예: 춘천 및 강원 북부" style="width:100%">
+        <label class="f" for="bfSms">문자 받을 번호 (비우면 전화번호)</label>
+        <input type="tel" id="bfSms" maxlength="20" placeholder="휴대폰 번호 권장" style="width:100%">
+        <label class="f" for="bfBiz">사업자등록번호</label>
+        <input type="text" id="bfBiz" maxlength="20" style="width:100%">
+        <label class="f" for="bfJob">직업소개사업 등록번호</label>
+        <input type="text" id="bfJob" maxlength="30" style="width:100%">
+        <label class="f" for="bfKakao">카카오톡 채널 주소</label>
+        <input type="text" id="bfKakao" maxlength="200" placeholder="예: http://pf.kakao.com/_abcde/chat" style="width:100%">
+        <label class="f" for="bfHours">운영 시간</label>
+        <input type="text" id="bfHours" maxlength="60" placeholder="예: 평일 08:00~18:00" style="width:100%">
+      </div>
+    </div>
     <div class="msg" id="bfErr"></div>
     <div class="formbtns">
       <button type="button" id="bfCancel">취소</button>
@@ -342,7 +370,12 @@
     document.getElementById("staffNote").hidden = !isHq;
     document.getElementById("addStaffBtn").hidden = !isHq;
     staffMe = me;
-    if (isHq) renderBranches(rows);
+    if (isHq) {
+      // 지점 홈페이지 정보 (SQL 33 이 없으면 조용히 비워 둠)
+      const { data: bs } = await db.from("branch_sites").select("*");
+      branchSites = Object.fromEntries((bs || []).map((x) => [x.branch_id, x]));
+      renderBranches(rows);
+    }
 
     const tbody = document.getElementById("staffRows");
     tbody.replaceChildren();
@@ -390,8 +423,11 @@
   }
 
   // ----- 본사 관리자: 지점 추가 / 지점 정보 수정 (staffBranches 의 첫 지점 = 본점, 이름은 홈페이지 정보와 연결) -----
-  let branchEditing = null;
+  let branchEditing = null, branchEditingMain = false, branchSites = {};
   const branchDlg = document.getElementById("branchDlg");
+  const HOMEPAGE_URL = "https://pshinhyoung-alt.github.io/iljob-gangwon/";   // 손님용 홈페이지 (지점은 ?b=코드)
+  const SITE_FIELDS = [["bfBrand", "brand"], ["bfLabel", "branch"], ["bfCeo", "ceo"], ["bfAddr", "address"], ["bfArea", "service_area"],
+                       ["bfSms", "sms"], ["bfBiz", "biz_no"], ["bfJob", "job_no"], ["bfKakao", "kakao_url"], ["bfHours", "hours"]];
   function renderBranches(staffRows) {
     document.getElementById("branchCard").hidden = false;
     const tbody = document.getElementById("branchRows");
@@ -401,50 +437,120 @@
       const tr = document.createElement("tr");
       const nameTd = el("td", b.name);
       if (i === 0) nameTd.append(el("span", "본점", "tag"));
+      const siteTd = el("td");
+      const site = branchSites[b.id];
+      const url = i === 0 ? HOMEPAGE_URL : site ? HOMEPAGE_URL + "?b=" + site.code : "";
+      if (url) {
+        const a = el("a", i === 0 ? "기본 주소" : site.code);
+        a.href = url; a.target = "_blank"; a.rel = "noopener";
+        const cp = el("button", "주소 복사");
+        cp.style.marginLeft = "6px";
+        cp.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(url); cp.textContent = "복사했습니다"; } catch (_) { prompt("아래 주소를 복사하세요.", url); }
+          setTimeout(() => (cp.textContent = "주소 복사"), 1500);
+        });
+        siteTd.append(a, cp);
+      } else {
+        siteTd.append(el("span", "없음", "muted"));
+      }
       const act = el("td");
       const eb = el("button", "수정");
       eb.addEventListener("click", () => openBranchDlg(b, i === 0));
       act.append(eb);
-      tr.append(nameTd, el("td", b.region || "-"), el("td", b.phone || "-"), el("td", n + "명"), act);
+      tr.append(nameTd, el("td", b.region || "-"), el("td", b.phone || "-"), el("td", n + "명"), siteTd, act);
       tbody.append(tr);
     });
   }
+  const syncSiteFields = () => { document.getElementById("bfSiteFields").hidden = !document.getElementById("bfCode").value.trim(); };
+  document.getElementById("bfCode").addEventListener("input", (e) => {
+    e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    syncSiteFields();
+  });
   function openBranchDlg(b, isMain) {
     branchEditing = b || null;
+    branchEditingMain = !!isMain;
     const $ = (id) => document.getElementById(id);
     $("bfTitle").textContent = b ? "지점 정보 수정" : "지점 추가";
     $("bfName").value = b ? b.name : "";
     $("bfName").disabled = !!isMain;   // 본점 이름은 홈페이지 정보에서 바꿈
     $("bfRegion").value = b ? b.region || "" : "";
     $("bfPhone").value = b ? b.phone || "" : "";
-    $("bfErr").textContent = isMain ? "본점 이름은 홈페이지 관리의 상호·지점명에서 바꿉니다." : "";
+    // 본점 홈페이지 정보는 홈페이지 관리에서 고치므로 이 칸은 지점에만 보임
+    $("bfSiteBox").hidden = !!isMain;
+    const site = (b && branchSites[b.id]) || {};
+    $("bfCode").value = site.code || "";
+    for (const [id, key] of SITE_FIELDS) $(id).value = site[key] || "";
+    syncSiteFields();
+    $("bfErr").textContent = isMain ? "본점 이름과 홈페이지 정보는 홈페이지 관리의 상호·지점명 등에서 바꿉니다." : "";
     branchDlg.showModal();
   }
   document.getElementById("addBranchBtn").addEventListener("click", () => openBranchDlg(null, false));
   document.getElementById("bfCancel").addEventListener("click", () => branchDlg.close());
   document.getElementById("branchForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const err = document.getElementById("bfErr");
-    const name = document.getElementById("bfName").value.trim();
-    const region = document.getElementById("bfRegion").value.trim() || null;
-    const phone = document.getElementById("bfPhone").value.trim() || null;
+    const $ = (id) => document.getElementById(id);
+    const err = $("bfErr");
+    const name = $("bfName").value.trim();
+    const region = $("bfRegion").value.trim() || null;
+    const phone = $("bfPhone").value.trim() || null;
     if (!name) { err.textContent = "지점 이름을 입력해 주세요."; return; }
-    const save = document.getElementById("bfSave");
+
+    // 지점 홈페이지 정보 (주소 코드를 넣은 경우에만)
+    const code = branchEditingMain ? "" : $("bfCode").value.trim();
+    const site = {};
+    for (const [id, key] of SITE_FIELDS) site[key] = $(id).value.trim() || null;
+    if (code) {
+      if (!/^[a-z0-9][a-z0-9-]{1,29}$/.test(code)) { err.textContent = "주소 코드는 영문 소문자·숫자·하이픈 2~30자로 넣어 주세요. (예: chuncheon)"; return; }
+      if (!phone) { err.textContent = "홈페이지에 보일 지점 전화번호를 넣어 주세요."; return; }
+      const miss = [["brand", "상호"], ["ceo", "대표자"], ["address", "주소"], ["service_area", "서비스 지역"]].find(([k]) => !site[k]);
+      if (miss) { err.textContent = "지점 홈페이지의 '" + miss[1] + "'을(를) 입력해 주세요."; return; }
+    }
+
+    const save = $("bfSave");
     save.disabled = true;
     const patch = { region, phone };
-    if (!document.getElementById("bfName").disabled) patch.name = name;
-    const { error } = branchEditing
-      ? await db.from("branches").update(patch).eq("id", branchEditing.id)
-      : await db.from("branches").insert({ name, region, phone });
-    save.disabled = false;
+    if (!$("bfName").disabled) patch.name = name;
+    let branchId = branchEditing && branchEditing.id;
+    let error;
+    if (branchEditing) {
+      ({ error } = await db.from("branches").update(patch).eq("id", branchId));
+    } else {
+      let row;
+      ({ data: row, error } = await db.from("branches").insert({ name, region, phone }).select("id").single());
+      if (row) branchId = row.id;
+    }
     if (error) {
+      save.disabled = false;
       err.textContent = error.code === "23505" ? "같은 이름의 지점이 이미 있습니다." : "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      return;
+    }
+
+    // 지점 홈페이지 정보 저장 (코드를 비우면 지점 홈페이지 정보를 지움)
+    let siteMsg = "";
+    if (!branchEditingMain) {
+      const had = !!branchSites[branchId];
+      const r = code
+        ? await db.from("branch_sites").upsert({ branch_id: branchId, code, ...site, sms: site.sms ? site.sms.replace(/\D/g, "") : null, updated_at: new Date().toISOString() })
+        : had ? await db.from("branch_sites").delete().eq("branch_id", branchId) : { error: null };
+      if (r.error) {
+        siteMsg = r.error.code === "23505" ? "홈페이지 주소 코드 '" + code + "' 는 이미 다른 지점이 쓰고 있습니다."
+          : /branch_sites/.test(r.error.message || "") ? "지점 홈페이지 기능이 아직 서버에 없습니다. (SQL 33번을 먼저 실행해 주세요)"
+          : "지점 홈페이지 정보를 저장하지 못했습니다.";
+      }
+    }
+    save.disabled = false;
+    if (siteMsg) {
+      // 지점 자체는 저장됨. 목록을 새로 고치고 창은 열어 둔 채 이유를 보여 줌
+      branchEditing = staffBranches.find((x) => x.id === branchId) || branchEditing;
+      err.textContent = "지점은 저장했지만 " + siteMsg;
+      await loadStaff(staffMe);
       return;
     }
     const added = !branchEditing;
     branchDlg.close();
     await loadStaff(staffMe);
-    if (added) alert("'" + name + "' 지점을 만들었습니다.\n이제 위 직원 목록의 [+ 직원 추가]에서 이 지점의 지점장 계정을 만들어 주세요.");
+    if (added) alert("'" + name + "' 지점을 만들었습니다.\n이제 위 직원 목록의 [+ 직원 추가]에서 이 지점의 지점장 계정을 만들어 주세요."
+      + (code ? "\n\n이 지점의 홈페이지 주소: " + HOMEPAGE_URL + "?b=" + code : ""));
   });
 
   // 본사 관리자 전용 서버 기능(admin-set-password) 부르기. 실패하면 { msg } 에 이유
