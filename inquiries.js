@@ -21,8 +21,16 @@
   const PARAM = { age_group: "ageGroup", work_type: "workType", call_time: "callTime" };
 
   let rows = [], current = null;
+  let branchList = [], branchName = {};   // 본사 관리자 전용: 지점 목록 (접수를 다른 지점으로 넘길 때 사용)
 
-  if (isHq) $("purgeBox").hidden = false;
+  if (isHq) {
+    $("purgeBox").hidden = false;
+    db.from("branches").select("id,name").order("created_at").then(({ data }) => {
+      branchList = data || [];
+      branchName = Object.fromEntries(branchList.map((b) => [b.id, b.name]));
+      if (rows.length) render();
+    });
+  }
 
   const when = (iso) => {
     const d = new Date(iso);
@@ -76,6 +84,7 @@
       no.style.fontWeight = r.is_read ? "500" : "800";
       idTd.append(no, el("div", when(r.updated_at), "muted"));
       if (r.submit_count > 1) idTd.append(el("span", "추가 접수 " + (r.submit_count - 1) + "회", "tag warn"));
+      if (isHq && branchList.length > 1 && branchName[r.branch_id]) idTd.append(el("span", branchName[r.branch_id], "tag"));
 
       const phoneTd = el("td");
       const a = el("a", fmtPhone(r.phone));
@@ -199,6 +208,20 @@
     $("iAssignee").value = r.assignee || "";
     $("iMemo").value = r.memo || "";
 
+    // 본사 관리자: 접수를 다른 지점으로 넘기기 (지점이 둘 이상일 때만 보임)
+    const canMove = isHq && branchList.length > 1;
+    $("iBranchBox").hidden = !canMove;
+    if (canMove) {
+      $("iBranch").replaceChildren(...branchList.map((b) => new Option(b.name, b.id)));
+      $("iBranch").value = r.branch_id;
+      const done = r.status === "전환완료";
+      $("iBranch").disabled = done;
+      $("iMove").disabled = done;
+      $("iMoveNote").textContent = done
+        ? "이미 의뢰인·인력의뢰·구직자로 전환한 접수는 지점을 바꿀 수 없습니다."
+        : "넘기면 이 접수는 받은 지점의 접수함에 '새 접수'로 나타나고, 이 지점 접수함에서는 사라집니다.";
+    }
+
     const acts = $("iActions");
     acts.replaceChildren();
     const tel = el("a", "전화하기");
@@ -245,6 +268,21 @@
     }
   }
 
+  $("iMove").addEventListener("click", async () => {
+    const to = $("iBranch").value;
+    if (!current || to === current.branch_id) { $("iErr").textContent = "이미 이 지점의 접수입니다."; return; }
+    const name = branchName[to] || "선택한 지점";
+    if (!confirm(current.receipt_no + " 접수를 '" + name + "'(으)로 넘깁니다.\n이 지점 접수함에서는 보이지 않게 됩니다. 계속할까요?")) return;
+    $("iMove").disabled = true;
+    const { error } = await db.rpc("reassign_inquiry", { p_inquiry: current.id, p_branch: to });
+    $("iMove").disabled = false;
+    if (error) {
+      $("iErr").textContent = /[가-힣]/.test(error.message) ? error.message : "넘기지 못했습니다. 서버 SQL 32번이 적용되었는지 확인하세요.";
+      return;
+    }
+    $("idlg").close();
+    await load();
+  });
   $("iClose").addEventListener("click", () => $("idlg").close());
   $("iSaveMemo").addEventListener("click", async () => {
     const memo = $("iMemo").value.trim() || null;

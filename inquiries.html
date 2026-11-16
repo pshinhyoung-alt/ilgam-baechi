@@ -57,6 +57,14 @@
   <div class="muted" id="iSub"></div>
   <div id="iBody" style="margin-top:12px"></div>
   <div class="acts" id="iEditBar" style="margin-top:8px"></div>
+  <div id="iBranchBox" hidden>
+    <label class="f" for="iBranch">담당 지점 (본사 관리자만 바꿀 수 있음)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="iBranch" style="flex:1;min-width:180px"></select>
+      <button type="button" id="iMove">이 지점으로 넘기기</button>
+    </div>
+    <div class="muted" id="iMoveNote"></div>
+  </div>
   <label class="f" for="iAssignee">담당자</label>
   <input type="text" id="iAssignee" maxlength="50" placeholder="예: 홍길동">
   <label class="f" for="iMemo">직원 메모</label>
