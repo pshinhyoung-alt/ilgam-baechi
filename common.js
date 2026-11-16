@@ -116,7 +116,8 @@ function fmtPhone(s) {
 
 function renderNav(current, me) {
   const nav = document.getElementById("nav");
-  const links = [["admin.html", "홈"], ["inquiries.html", "접수함"], ["requests.html", "인력의뢰"], ["workers.html", "구직자"], ["clients.html", "의뢰인"]];
+  // 일하는 순서대로: 접수 확인 → 의뢰인 등록 → 인력의뢰·배치 → 구직자 → 정산
+  const links = [["admin.html", "홈"], ["inquiries.html", "접수함"], ["clients.html", "의뢰인"], ["requests.html", "인력의뢰"], ["workers.html", "구직자"]];
   if (me && me.role !== "branch_staff") links.push(["settlement.html", "정산"], ["settings.html", "설정"]);
   for (const [href, label] of links) {
     const a = el("a", label);
