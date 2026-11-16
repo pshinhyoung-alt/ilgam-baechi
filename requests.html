@@ -97,10 +97,15 @@
     <div class="muted">의뢰인이 한국어 의사소통을 요구하는 현장일 때만 고르세요. 자동 추천에서 이 급수보다 낮은 외국인 구직자는 빠집니다.</div>
     <label class="f" for="offered">의뢰인 제시 일당 (원) *</label>
     <input type="number" id="offered" min="1" step="1" required>
-    <label class="f" for="wage">확정 단가 (원)</label>
+    <label class="f" for="wage">확정 단가 (원) — 수수료·원천징수를 빼기 전 일당</label>
     <input type="number" id="wage" min="1" step="1">
     <div class="muted" id="wageNote"></div>
     <div class="msg" id="wageWarn" style="color:#b26a00"></div>
+    <div id="netBox" hidden style="margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--brand-soft)">
+      <div style="font-size:12px;color:var(--muted)">구직자 지급 예정액 (자동 계산 · 1인 기준)</div>
+      <div id="netAmount" style="font-size:20px;font-weight:800;color:var(--brand)"></div>
+      <div class="muted" id="netPreview"></div>
+    </div>
     <label class="f"><span class="checks"><label><input type="checkbox" id="feeOn"> 소개수수료 적용</label></span></label>
     <div id="feeBox" hidden>
       <div class="checks"><input type="number" id="feeRate" min="0" max="100" step="0.1" style="width:100px"> %</div>
@@ -113,7 +118,6 @@
       <div class="muted">소득세 3% + 지방소득세 0.3%를 일당에서 소개수수료를 뺀 금액을 기준으로 계산해 공제합니다. 4대보험은 공제하지 않습니다.</div>
       <div class="muted" id="taxPreview"></div>
     </div>
-    <div class="muted" id="netPreview" style="margin-top:6px;font-weight:600"></div>
     <label class="f" for="radius">배치된 구직자 출근 반경 (m)</label>
     <input type="number" id="radius" min="50" max="2000" step="1" style="width:120px">
     <div class="muted">현장마다 바꿀 수 있습니다. 50~2000m</div>

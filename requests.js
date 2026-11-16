@@ -308,14 +308,16 @@
   }
 
   function updateNet() {
-    const box = $("netPreview");
-    const feeOn = $("feeOn").checked, taxOn = $("taxOn").checked;
+    const taxOn = $("taxOn").checked;
     const wage = Number($("wage").value || $("offered").value) || 0;
-    if ((!feeOn && !taxOn) || !wage) { box.textContent = ""; return; }
+    $("netBox").hidden = !wage;
+    if (!wage) return;
     const fee = currentFeeAmount();
     const tax = taxOn ? calcTax(wage - fee, settings).total : 0;
-    box.textContent = "1인 기준 구직자 지급 예정액 " + won(wage - fee - tax) + " (일당 " + won(wage)
-      + (fee ? " − 수수료 " + won(fee) : "") + (tax ? " − 원천징수 " + won(tax) : "") + ")";
+    $("netAmount").textContent = won(wage - fee - tax);
+    $("netPreview").textContent = fee || tax
+      ? "일당 " + won(wage) + (fee ? " − 소개수수료 " + won(fee) : "") + (tax ? " − 원천징수 " + won(tax) : "")
+      : "공제 없음 — 확정 단가 그대로 지급";
   }
 
   // 수수료·원천징수·지급 예정액 표시를 한꺼번에 갱신
@@ -420,6 +422,11 @@
   $("dClear").addEventListener("click", () => { $("df").value = $("dt").value = ""; render(); });
   $("clientBarX").addEventListener("click", () => { clientOnlyId = ""; history.replaceState(null, "", location.pathname); render(); });
   $("branch").addEventListener("change", () => fillClients($("branch").value));
+  // 제시 일당을 바꾸면, 확정 단가를 따로 정하지 않았을 때는 확정 단가도 같은 금액으로 자동 입력
+  $("offered").addEventListener("input", () => {
+    if (canWage && syncWage && !wageTouched) $("wage").value = $("offered").value;
+    updateWarn(); updateWageNote(); updateFee();
+  });
   $("wage").addEventListener("input", () => { wageTouched = true; updateWarn(); updateWageNote(); updateFee(); });
   $("feeOn").addEventListener("change", () => {
     // 새로 체크하면 기본 수수료율부터 시작
