@@ -75,19 +75,19 @@ const AssignUI = (() => {
   async function reload() {
     const [rq, ws, mine, day, dc, hist, rats] = await Promise.all([
       db.from("job_requests").select("*").eq("id", req.id).maybeSingle(),
-      db.from("workers").select("*").eq("branch_id", req.branch_id).is("deleted_at", null).order("name"),
+      selectAll(() => db.from("workers").select("*").eq("branch_id", req.branch_id).is("deleted_at", null).order("name").order("id")),
       db.from("assignments").select("*").eq("request_id", req.id).order("assigned_at"),
       db.from("assignments")
         .select("worker_id,request_id,job_requests!inner(work_date,start_time,end_time)")
         .not("status", "in", "(cancelled,declined)")
         .eq("job_requests.work_date", req.work_date),
-      db.from("worker_documents").select("worker_id").eq("kind", "qualification"),
-      db.from("assignments")
+      selectAll(() => db.from("worker_documents").select("worker_id").eq("kind", "qualification").order("id")),
+      selectAll(() => db.from("assignments")
         .select("worker_id,job_requests!inner(client_id)")
         .in("status", ["checked_out", "completed"])
-        .eq("job_requests.client_id", req.client_id),
-      db.from("assignment_ratings").select("*")
-        .order("rated_at", { ascending: false }).limit(1000),
+        .eq("job_requests.client_id", req.client_id).order("id")),
+      selectAll(() => db.from("assignment_ratings").select("*")
+        .order("rated_at", { ascending: false }).order("assignment_id")),
     ]);
     if (!rq.data) { $("adlg").close(); ctx.onChange(); return; }
     if (ws.error || mine.error || day.error) { $("aErr").textContent = "정보를 불러오지 못했습니다."; return; }

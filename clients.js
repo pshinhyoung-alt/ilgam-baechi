@@ -39,7 +39,7 @@
   }
 
   async function load() {
-    const { data, error } = await db.from("clients").select("*").order("created_at", { ascending: false });
+    const { data, error } = await selectAll(() => db.from("clients").select("*").order("created_at", { ascending: false }).order("id"));
     if (error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
     rows = data;
     // 의뢰인별 의뢰 건수·마지막 작업일 (휴지통 의뢰 제외, 1000건씩 이어서)

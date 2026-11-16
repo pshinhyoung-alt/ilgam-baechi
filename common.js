@@ -105,6 +105,18 @@ function printPage(title) {
   window.print();
 }
 
+// Supabase 는 한 번에 1000줄까지만 돌려줌 → 1000줄씩 이어서 끝까지 가져오기
+// make: 부를 때마다 같은 조건의 새 질의를 만드는 함수 (순서가 일정하도록 order 를 붙여 둘 것)
+async function selectAll(make) {
+  const all = [];
+  for (let off = 0; ; off += 1000) {
+    const { data, error } = await make().range(off, off + 999);
+    if (error) return { data: null, error };
+    all.push(...data);
+    if (data.length < 1000) return { data: all, error: null };
+  }
+}
+
 function digits(s) { return (s || "").replace(/\D/g, ""); }
 
 function fmtPhone(s) {
@@ -155,6 +167,8 @@ function renderNav(current, me) {
 async function requireStaff(current) {
   const { data: s } = await db.auth.getSession();
   if (!s.session) { location.replace("index.html"); return null; }
+  // 임시 비밀번호로 들어온 경우: 홈에서 새 비밀번호부터 정하게 함
+  if (s.session.user.user_metadata && s.session.user.user_metadata.must_change_password) { location.replace("admin.html"); return null; }
   const { data: me, error } = await db.from("staff").select("*").eq("user_id", s.session.user.id).maybeSingle();
   const main = document.querySelector("main");
   if (error || !me || !me.active) {

@@ -75,8 +75,8 @@
 
   async function load() {
     const [w, d, h] = await Promise.all([
-      db.from("workers").select("*").order("created_at", { ascending: false }),
-      db.from("worker_documents").select("*"),
+      selectAll(() => db.from("workers").select("*").order("created_at", { ascending: false }).order("id")),
+      selectAll(() => db.from("worker_documents").select("*").order("id")),
       db.rpc("worker_bank_hints"),
     ]);
     if (w.error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
@@ -372,7 +372,7 @@
     if (mine.health_check && !editing.health_consent) {
       box.append(el("div", "※ 신체검사서는 건강 정보라서 '신체검사서 별도 동의'를 체크·저장해야 보낼 수 있습니다.", "muted"));
     }
-    const { data: cl } = await db.from("clients").select("id,name,branch_id").is("deleted_at", null).order("name");
+    const { data: cl } = await selectAll(() => db.from("clients").select("id,name,branch_id").is("deleted_at", null).order("name").order("id"));
     const sel = $("shareClient");
     sel.replaceChildren(new Option("직접 입력", ""));
     for (const c of cl || []) if (c.branch_id === editing.branch_id) sel.append(new Option(c.name, c.id));

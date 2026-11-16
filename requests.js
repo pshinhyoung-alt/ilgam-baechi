@@ -82,7 +82,7 @@
     const [jt, br, cl, st] = await Promise.all([
       db.from("job_types").select("*").order("sort_order"),
       db.from("branches").select("id,name").order("name"),
-      db.from("clients").select("id,name,branch_id,deleted_at").order("name"),
+      selectAll(() => db.from("clients").select("id,name,branch_id,deleted_at").order("name").order("id")),
       db.from("app_settings").select("*").maybeSingle(),
     ]);
     jobTypes = jt.data || [];
@@ -97,14 +97,14 @@
   }
 
   async function load() {
-    const { data, error } = await db.from("job_requests").select("*")
-      .order("work_date", { ascending: false }).order("start_time", { ascending: false });
+    const { data, error } = await selectAll(() => db.from("job_requests").select("*")
+      .order("work_date", { ascending: false }).order("start_time", { ascending: false }).order("id"));
     if (error) { $("empty").textContent = "목록을 불러오지 못했습니다."; return; }
     rows = data;
     // 인력의뢰별 배치된 인원 수
     // (검색용으로 배치된 구직자 이름도 함께. 이름을 못 가져오면 인원 수만 사용)
-    let { data: asg, error: asgErr } = await db.from("assignments").select("request_id, workers(name)").not("status", "in", "(cancelled,declined)");
-    if (asgErr) ({ data: asg } = await db.from("assignments").select("request_id").not("status", "in", "(cancelled,declined)"));
+    let { data: asg, error: asgErr } = await selectAll(() => db.from("assignments").select("request_id, workers(name)").not("status", "in", "(cancelled,declined)").order("id"));
+    if (asgErr) ({ data: asg } = await selectAll(() => db.from("assignments").select("request_id").not("status", "in", "(cancelled,declined)").order("id")));
     counts = {};
     workerNames = {};
     for (const a of asg || []) {
