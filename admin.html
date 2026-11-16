@@ -77,6 +77,20 @@
     </div>
     <div class="muted" id="staffNote" hidden>[+ 직원 추가]·[비밀번호 재설정]을 누르면 임시 비밀번호가 만들어집니다. 직원에게 직접(전화·대면) 알려 주시면, 직원은 처음 로그인할 때 자기 비밀번호를 새로 정합니다. 퇴사한 직원은 [사용 중지]를 눌러 주세요.</div>
   </div>
+  <div class="card" id="branchCard" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">지점 관리</h2>
+      <button class="primary" id="addBranchBtn">+ 지점 추가</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>지점 이름</th><th>지역</th><th>전화</th><th>직원</th><th></th></tr></thead>
+        <tbody id="branchRows"></tbody>
+      </table>
+    </div>
+    <div class="muted">지점을 추가한 뒤, 위 직원 목록의 [+ 직원 추가]에서 그 지점의 <b>지점장</b> 계정을 만들어 주세요. 지점장은 같은 프로그램 주소로 로그인하면 <b>자기 지점의 자료만</b> 보입니다. 구직자·의뢰인·인력의뢰는 지점마다 따로 쌓이고, 본사 관리자는 모든 지점을 봅니다.</div>
+    <div class="muted" id="mainBranchNote">맨 위 첫 지점(본점)의 이름은 홈페이지 관리의 <b>상호·지점명</b>과 연결되어 있어 거기서 바꿉니다. 홈페이지에서 들어오는 접수는 현재 첫 지점으로 들어갑니다.</div>
+  </div>
 </main>
 
 <dialog id="staffDlg" style="width:min(440px,94vw)">
@@ -107,6 +121,23 @@
     <div class="formbtns">
       <button type="button" id="sfCancel">취소</button>
       <button type="submit" class="primary" id="sfSave">계정 만들기</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="branchDlg" style="width:min(420px,94vw)">
+  <form id="branchForm">
+    <h2 id="bfTitle">지점 추가</h2>
+    <label class="f" for="bfName">지점 이름 *</label>
+    <input type="text" id="bfName" maxlength="40" required placeholder="예: 일잡코리아 춘천지점" style="width:100%">
+    <label class="f" for="bfRegion">지역</label>
+    <input type="text" id="bfRegion" maxlength="40" placeholder="예: 강원도 춘천" style="width:100%">
+    <label class="f" for="bfPhone">지점 전화번호</label>
+    <input type="tel" id="bfPhone" maxlength="20" placeholder="예: 033-000-0000" style="width:100%">
+    <div class="msg" id="bfErr"></div>
+    <div class="formbtns">
+      <button type="button" id="bfCancel">취소</button>
+      <button type="submit" class="primary" id="bfSave">저장</button>
     </div>
   </form>
 </dialog>
@@ -302,7 +333,7 @@
   async function loadStaff(me) {
     const { data: rows, error } = await db.from("staff").select("*").order("created_at");
     if (error) return;
-    const { data: brs } = await db.from("branches").select("id,name").order("created_at");
+    const { data: brs } = await db.from("branches").select("id,name,region,phone").order("created_at");
     staffBranches = brs || [];
     const brName = Object.fromEntries(staffBranches.map((b) => [b.id, b.name]));
     const isHq = me.role === "hq_admin";
@@ -311,6 +342,7 @@
     document.getElementById("staffNote").hidden = !isHq;
     document.getElementById("addStaffBtn").hidden = !isHq;
     staffMe = me;
+    if (isHq) renderBranches(rows);
 
     const tbody = document.getElementById("staffRows");
     tbody.replaceChildren();
@@ -356,6 +388,64 @@
       tbody.append(tr);
     }
   }
+
+  // ----- 본사 관리자: 지점 추가 / 지점 정보 수정 (staffBranches 의 첫 지점 = 본점, 이름은 홈페이지 정보와 연결) -----
+  let branchEditing = null;
+  const branchDlg = document.getElementById("branchDlg");
+  function renderBranches(staffRows) {
+    document.getElementById("branchCard").hidden = false;
+    const tbody = document.getElementById("branchRows");
+    tbody.replaceChildren();
+    staffBranches.forEach((b, i) => {
+      const n = staffRows.filter((s) => s.branch_id === b.id && s.active).length;
+      const tr = document.createElement("tr");
+      const nameTd = el("td", b.name);
+      if (i === 0) nameTd.append(el("span", "본점", "tag"));
+      const act = el("td");
+      const eb = el("button", "수정");
+      eb.addEventListener("click", () => openBranchDlg(b, i === 0));
+      act.append(eb);
+      tr.append(nameTd, el("td", b.region || "-"), el("td", b.phone || "-"), el("td", n + "명"), act);
+      tbody.append(tr);
+    });
+  }
+  function openBranchDlg(b, isMain) {
+    branchEditing = b || null;
+    const $ = (id) => document.getElementById(id);
+    $("bfTitle").textContent = b ? "지점 정보 수정" : "지점 추가";
+    $("bfName").value = b ? b.name : "";
+    $("bfName").disabled = !!isMain;   // 본점 이름은 홈페이지 정보에서 바꿈
+    $("bfRegion").value = b ? b.region || "" : "";
+    $("bfPhone").value = b ? b.phone || "" : "";
+    $("bfErr").textContent = isMain ? "본점 이름은 홈페이지 관리의 상호·지점명에서 바꿉니다." : "";
+    branchDlg.showModal();
+  }
+  document.getElementById("addBranchBtn").addEventListener("click", () => openBranchDlg(null, false));
+  document.getElementById("bfCancel").addEventListener("click", () => branchDlg.close());
+  document.getElementById("branchForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("bfErr");
+    const name = document.getElementById("bfName").value.trim();
+    const region = document.getElementById("bfRegion").value.trim() || null;
+    const phone = document.getElementById("bfPhone").value.trim() || null;
+    if (!name) { err.textContent = "지점 이름을 입력해 주세요."; return; }
+    const save = document.getElementById("bfSave");
+    save.disabled = true;
+    const patch = { region, phone };
+    if (!document.getElementById("bfName").disabled) patch.name = name;
+    const { error } = branchEditing
+      ? await db.from("branches").update(patch).eq("id", branchEditing.id)
+      : await db.from("branches").insert({ name, region, phone });
+    save.disabled = false;
+    if (error) {
+      err.textContent = error.code === "23505" ? "같은 이름의 지점이 이미 있습니다." : "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      return;
+    }
+    const added = !branchEditing;
+    branchDlg.close();
+    await loadStaff(staffMe);
+    if (added) alert("'" + name + "' 지점을 만들었습니다.\n이제 위 직원 목록의 [+ 직원 추가]에서 이 지점의 지점장 계정을 만들어 주세요.");
+  });
 
   // 본사 관리자 전용 서버 기능(admin-set-password) 부르기. 실패하면 { msg } 에 이유
   async function callAdminFn(body) {
