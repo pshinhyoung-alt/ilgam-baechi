@@ -603,7 +603,9 @@
     $("name").value = q.name || "";
     $("phone").value = fmtPhone(q.phone_digits);
     $("area").value = q.location || "";
-    for (const jid of jobIdsFromText(q.field, jobTypes)) {
+    // 홈페이지 양식의 [요양보호사 자격증 있음] 표시가 있으면 요양보호사 직종도 체크
+    const careCert = (q.details || "").includes("[요양보호사 자격증 있음]");
+    for (const jid of jobIdsFromText((q.field || "") + (careCert ? " 요양보호사" : ""), jobTypes)) {
       const cb = $("jobs").querySelector('input[value="' + jid + '"]');
       if (cb) cb.checked = true;
     }
@@ -620,6 +622,8 @@
     if (q.nationality && q.nationality.includes("외국")) {
       $("nat").value = "foreign";
       $("foreignBox").hidden = false;
+      const tk = (q.details || "").match(/\[TOPIK (\d)급\]/);
+      if (tk) $("topik").value = tk[1];
     }
     // 홈페이지 동의는 '성함·연락처·희망 조건' 수집에 대한 것이라서, 신분증·계좌 동의는 따로 받아야 함 → 체크하지 않음
     $("consent").checked = false;

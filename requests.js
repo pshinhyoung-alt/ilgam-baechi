@@ -637,6 +637,12 @@
     const ids = jobIdsFromText(q.field, jobTypes.filter((j) => j.active));
     $("job").value = ids[0] || "";
     $("req").value = [q.period && "근무 기간: " + q.period, q.details].filter(Boolean).join("\n").slice(0, 500);
+    // 홈페이지 양식의 자격증·한국어 조건 ([자격증 필수] / [자격증 우선] / [한국어 TOPIK 3급 이상])
+    const d = q.details || "";
+    if (d.includes("[자격증 필수]")) $("certPref").value = "require";
+    else if (d.includes("[자격증 우선]")) $("certPref").value = "prefer";
+    const tk = d.match(/\[한국어 TOPIK (\d)급 이상\]/);
+    if (tk) $("minTopik").value = tk[1];
     $("err").textContent = "접수 내용으로 미리 채웠습니다. 작업 시간과 일당을 입력하고 저장하세요.";
   }
 

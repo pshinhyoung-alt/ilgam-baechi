@@ -184,5 +184,9 @@ function jobIdsFromText(text, jobTypes) {
     const j = jobTypes.find((x) => x.name === name);
     if (j && !ids.includes(j.id)) ids.push(j.id);
   }
+  // 홈페이지가 직종 이름 그대로 보낸 경우 (홈페이지 분야 목록에 자동으로 추가된 직종, 예: 조경)
+  for (const j of jobTypes) {
+    if (t.includes(j.name) && !ids.includes(j.id)) ids.push(j.id);
+  }
   return ids;
 }
