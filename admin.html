@@ -161,6 +161,12 @@
       el("div", "소속: " + branchName),
       el("div", "단가·수수료 수정: " + (me.can_edit_wage ? "가능" : "불가"), "muted")
     );
+    // 메뉴 줄에 지금 로그인한 계정 표시 (예: 박신형 · 본사 관리자)
+    const who = el("span", me.name, "who" + (me.role === "hq_admin" ? " hq" : ""));
+    who.append(el("small", ROLE[me.role] + (me.role !== "hq_admin" ? " · " + branchName : "")));
+    who.title = "지금 로그인한 계정";
+    document.getElementById("logout").before(who);
+
     const pwBtn = el("button", "비밀번호 변경");
     pwBtn.style.marginTop = "10px";
     pwBtn.addEventListener("click", () => openPw(false));

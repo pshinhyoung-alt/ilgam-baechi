@@ -114,6 +114,14 @@ function fmtPhone(s) {
   return s;
 }
 
+// 메뉴 줄에 붙는 '지금 로그인한 계정' 표시 (예: 박신형 · 본사 관리자)
+function whoBadge(me, branchName) {
+  const b = el("span", me.name, "who" + (me.role === "hq_admin" ? " hq" : ""));
+  b.append(el("small", ROLE[me.role] + (me.role !== "hq_admin" && branchName ? " · " + branchName : "")));
+  b.title = "지금 로그인한 계정";
+  return b;
+}
+
 function renderNav(current, me) {
   const nav = document.getElementById("nav");
   // 일하는 순서대로: 접수 확인 → 의뢰인 등록 → 인력의뢰·배치 → 구직자 → 정산
@@ -133,6 +141,7 @@ function renderNav(current, me) {
     hp.title = "손님용 홈페이지의 관리자 화면 (상호·전화·주소, 접수 받을 곳)";
     nav.append(hp);
   }
+  if (me) nav.append(whoBadge(me, me.branch_name));
   const out = el("button", "로그아웃");
   out.addEventListener("click", async () => {
     await db.auth.signOut();
@@ -151,6 +160,10 @@ async function requireStaff(current) {
   if (error || !me || !me.active) {
     main.replaceChildren(el("div", "등록되지 않았거나 사용이 중지된 계정입니다. 본사 관리자에게 문의하세요.", "msg"));
     return null;
+  }
+  if (me.branch_id) {
+    const { data: b } = await db.from("branches").select("name").eq("id", me.branch_id).maybeSingle();
+    me.branch_name = b ? b.name : "";
   }
   renderNav(current, me);
   // 접수함 메뉴에 '신규' 접수 건수를 작게 표시 (접수 기능이 아직 없으면 조용히 건너뜀)
