@@ -218,7 +218,10 @@
 
     const { data: me, error } = await db.from("staff").select("*").eq("user_id", uid).maybeSingle();
     if (error) return showMsg("정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    if (!me || !me.active) return showMsg("등록되지 않았거나 사용이 중지된 계정입니다. 본사 관리자에게 문의하세요.");
+    if (!me || !me.active) {
+      const who = s.session.user.email || "";
+      return showMsg((!me ? "직원 목록에 등록되지 않은 계정입니다." : "사용이 중지된 계정입니다.") + " 본사 관리자에게 문의하세요." + (who ? " (지금 로그인한 계정: " + who + ")" : ""));
+    }
 
     let branchName = "전체 지점";
     if (me.branch_id) {

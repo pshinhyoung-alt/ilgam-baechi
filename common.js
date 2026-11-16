@@ -172,7 +172,8 @@ async function requireStaff(current) {
   const { data: me, error } = await db.from("staff").select("*").eq("user_id", s.session.user.id).maybeSingle();
   const main = document.querySelector("main");
   if (error || !me || !me.active) {
-    main.replaceChildren(el("div", "등록되지 않았거나 사용이 중지된 계정입니다. 본사 관리자에게 문의하세요.", "msg"));
+    const who = s.session.user.email || "";
+    main.replaceChildren(el("div", (!me ? "직원 목록에 등록되지 않은 계정입니다." : "사용이 중지된 계정입니다.") + " 본사 관리자에게 문의하세요." + (who ? " (지금 로그인한 계정: " + who + ")" : ""), "msg"));
     return null;
   }
   if (me.branch_id) {
