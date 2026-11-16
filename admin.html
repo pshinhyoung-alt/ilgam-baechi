@@ -532,7 +532,7 @@
     if (!branchEditingMain) {
       const had = !!branchSites[branchId];
       const r = code
-        ? await db.from("branch_sites").upsert({ branch_id: branchId, code, ...site, sms: site.sms ? site.sms.replace(/\D/g, "") : null, updated_at: new Date().toISOString() })
+        ? await db.from("branch_sites").upsert({ branch_id: branchId, code, ...site, phone, sms: site.sms ? site.sms.replace(/\D/g, "") : null, updated_at: new Date().toISOString() })
         : had ? await db.from("branch_sites").delete().eq("branch_id", branchId) : { error: null };
       if (r.error) {
         siteMsg = r.error.code === "23505" ? "홈페이지 주소 코드 '" + code + "' 는 이미 다른 지점이 쓰고 있습니다."
