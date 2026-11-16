@@ -462,7 +462,13 @@
       const eb = el("button", "수정");
       eb.addEventListener("click", () => openBranchDlg(b, i === 0));
       act.append(eb);
-      tr.append(nameTd, el("td", b.region || "-"), el("td", b.phone || "-"), el("td", n + "명"), siteTd, act);
+      // 하이픈 없이 저장된 번호도 보기 좋게 (0327111234 → 032-711-1234)
+      const d = (b.phone || "").replace(/\D/g, "");
+      const phoneTxt = !b.phone ? "-" : /-/.test(b.phone) ? b.phone
+        : d.length === 11 ? d.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3")
+        : d.length === 10 ? (d.startsWith("02") ? d.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3") : d.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3"))
+        : b.phone;
+      tr.append(nameTd, el("td", b.region || "-"), el("td", phoneTxt), el("td", n + "명"), siteTd, act);
       tbody.append(tr);
     });
   }
