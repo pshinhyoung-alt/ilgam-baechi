@@ -117,6 +117,19 @@ async function selectAll(make) {
   }
 }
 
+// 본사 관리자 화면에서 지점이 둘 이상일 때 목록 줄에 붙이는 지점 이름표 (그 밖에는 null)
+function branchTag(me, branches, branchId) {
+  if (!me || me.role !== "hq_admin" || !branches || branches.length < 2) return null;
+  const b = branches.find((x) => x.id === branchId);
+  return b ? el("div", b.name, "tag") : null;
+}
+// 검색칸에 지점 이름을 넣어도 찾을 수 있게 (본사 관리자만)
+function branchNameOf(me, branches, branchId) {
+  if (!me || me.role !== "hq_admin" || !branches) return "";
+  const b = branches.find((x) => x.id === branchId);
+  return b ? b.name : "";
+}
+
 function digits(s) { return (s || "").replace(/\D/g, ""); }
 
 function fmtPhone(s) {

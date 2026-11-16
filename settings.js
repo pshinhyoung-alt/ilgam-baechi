@@ -34,10 +34,27 @@
     return true;
   }
 
+  // 직종은 모든 지점과 홈페이지 접수 양식이 함께 쓰므로 본사 관리자만 바꿈. 지점장은 보기만
+  if (!isHq) {
+    $("addType").closest(".toolbar").hidden = true;
+    $("typeEmpty").insertAdjacentElement("beforebegin",
+      el("div", "직종은 모든 지점과 홈페이지 접수 양식이 함께 쓰기 때문에 본사 관리자만 바꿀 수 있습니다. 필요한 직종은 본사에 요청해 주세요.", "muted"));
+  }
+
   function renderTypes() {
     const tbody = $("typeRows");
     tbody.replaceChildren();
     $("typeEmpty").textContent = types.length ? "" : "등록된 직종이 없습니다.";
+    if (!isHq) {
+      for (const t of types) {
+        const tr = document.createElement("tr");
+        const sets = [t.show_qualification && "자격증 칸 표시", t.qualification_required && "자격증 미등록 경고", t.training_required && "자체교육 필요"].filter(Boolean).join(" · ");
+        tr.append(el("td", ""), el("td", t.name), el("td", t.active ? "사용 중" : "사용 안 함"), el("td", sets || "-"), el("td", ""));
+        if (!t.active) tr.style.opacity = ".6";
+        tbody.append(tr);
+      }
+      return;
+    }
     types.forEach((t, i) => {
       const tr = document.createElement("tr");
       const order = el("td");

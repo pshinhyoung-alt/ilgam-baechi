@@ -133,7 +133,7 @@
       if (dt && r.work_date > dt) return false;
       if (lack && (["done", "hold"].includes(r.status) || (counts[r.id] || 0) >= r.headcount)) return false;
       if (!q) return true;
-      return [clientName[r.client_id], r.address, jobName[r.job_type_id], r.requirements, (workerNames[r.id] || []).join(" ")]
+      return [clientName[r.client_id], r.address, jobName[r.job_type_id], r.requirements, (workerNames[r.id] || []).join(" "), branchNameOf(me, branches, r.branch_id)]
         .join("\n").toLowerCase().includes(q);
     }));
 
@@ -160,8 +160,11 @@
       const stTd = el("td", r.deleted_at ? "휴지통" : STATUS[r.status]);
       stTd.style.minWidth = "120px";
       if (r.status === "hold" && r.hold_reason) stTd.append(el("div", "사유: " + r.hold_reason, "muted"));
+      const dateTd = el("td", r.work_date + " " + hhmm(r.start_time) + "~" + hhmm(r.end_time));
+      const bt = branchTag(me, branches, r.branch_id);
+      if (bt) dateTd.append(bt);
       tr.append(
-        el("td", r.work_date + " " + hhmm(r.start_time) + "~" + hhmm(r.end_time)),
+        dateTd,
         el("td", clientName[r.client_id] || "-"),
         jobTd,
         el("td", (counts[r.id] || 0) + "/" + r.headcount + "명"),

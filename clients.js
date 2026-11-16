@@ -65,7 +65,7 @@
       if (trash !== !!r.deleted_at) return false;
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd))
-        || [r.address, r.memo].join("\n").toLowerCase().includes(q);
+        || [r.address, r.memo, branchNameOf(me, branches, r.branch_id)].join("\n").toLowerCase().includes(q);
     }));
     shown = list;
     const tbody = $("rows");
@@ -76,6 +76,8 @@
       // 이름·의뢰 건수를 누르면 그 의뢰인의 인력의뢰만 모아 보여 줌
       const link = (text) => { const a = el("a", text); a.href = "requests.html?client=" + r.id; a.title = "이 의뢰인의 인력의뢰 보기"; return a; };
       const nameTd = el("td"); nameTd.append(link(r.name));
+      const bt = branchTag(me, branches, r.branch_id);
+      if (bt) nameTd.append(bt);
       const reqTd = el("td"); if (nOf(r)) reqTd.append(link(reqText(r))); else reqTd.textContent = reqText(r);
       tr.append(nameTd, el("td", fmtPhone(r.phone)), el("td", r.address || ""), el("td", r.memo || ""), reqTd, actions(r));
       tbody.append(tr);

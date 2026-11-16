@@ -123,7 +123,7 @@
       if (flag === "visa") { const n = visaDaysLeft(r); if (n === null || n > 30) return false; }
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || (qd && r.phone.includes(qd))
-        || [r.area, r.memo, jobLabel(r), r.nationality, r.visa_type].join("\n").toLowerCase().includes(q);
+        || [r.area, r.memo, jobLabel(r), r.nationality, r.visa_type, branchNameOf(me, branches, r.branch_id)].join("\n").toLowerCase().includes(q);
     }));
 
     shown = list;
@@ -134,6 +134,8 @@
     for (const r of list) {
       const tr = document.createElement("tr");
       const nameTd = el("td", r.name);
+      const bt = branchTag(me, branches, r.branch_id);
+      if (bt) nameTd.append(bt);
       if (!r.consent_confirmed) nameTd.append(el("div", "동의 확인 필요", "tag warn"));
       if (r.no_show_count > 0) nameTd.append(el("div", "노쇼 " + r.no_show_count + "회", r.no_show_count >= 3 ? "tag warn" : "tag"));
       if (rating[r.id]) {
