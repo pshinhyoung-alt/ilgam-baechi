@@ -64,14 +64,43 @@
     <div class="msg" id="dashErr"></div>
   </div>
   <div class="card" id="staffCard" hidden>
-    <h2>직원 목록</h2>
-    <table>
-      <thead><tr><th>이름</th><th>권한</th><th>단가·수수료 수정</th><th id="actCol"></th></tr></thead>
-      <tbody id="staffRows"></tbody>
-    </table>
-    <div class="muted" id="staffNote" hidden>[비밀번호 재설정]을 누르면 임시 비밀번호가 만들어집니다. 직원에게 직접(전화·대면) 알려 주시면, 직원은 다음 로그인 때 자기 비밀번호를 새로 정합니다.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">직원 목록</h2>
+      <button class="primary" id="addStaffBtn" hidden>+ 직원 추가</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>이름</th><th>지점</th><th>권한</th><th>단가·수수료 수정</th><th>상태</th><th id="actCol"></th></tr></thead>
+        <tbody id="staffRows"></tbody>
+      </table>
+    </div>
+    <div class="muted" id="staffNote" hidden>[+ 직원 추가]·[비밀번호 재설정]을 누르면 임시 비밀번호가 만들어집니다. 직원에게 직접(전화·대면) 알려 주시면, 직원은 처음 로그인할 때 자기 비밀번호를 새로 정합니다. 퇴사한 직원은 [사용 중지]를 눌러 주세요.</div>
   </div>
 </main>
+
+<dialog id="staffDlg" style="width:min(440px,94vw)">
+  <form id="staffForm">
+    <h2>직원 추가</h2>
+    <div class="muted">로그인할 이메일과 이름을 넣으면 계정이 만들어지고 임시 비밀번호가 나옵니다. 직원이 실제로 받는 이메일을 쓰면, 비밀번호를 잊었을 때 메일로도 다시 정할 수 있습니다.</div>
+    <label class="f" for="sfName">이름</label>
+    <input type="text" id="sfName" maxlength="40" required style="width:100%">
+    <label class="f" for="sfEmail">이메일 (로그인 아이디)</label>
+    <input type="email" id="sfEmail" maxlength="200" required autocomplete="off" style="width:100%">
+    <label class="f" for="sfBranch">지점</label>
+    <select id="sfBranch" style="width:100%"></select>
+    <label class="f" for="sfRole">권한</label>
+    <select id="sfRole" style="width:100%">
+      <option value="branch_staff">지점 직원</option>
+      <option value="branch_manager">지점장 (자기 지점의 정산·설정까지)</option>
+    </select>
+    <label class="f"><input type="checkbox" id="sfWage"> 단가·수수료 수정 허용</label>
+    <div class="msg" id="sfErr"></div>
+    <div class="formbtns">
+      <button type="button" id="sfCancel">취소</button>
+      <button type="submit" class="primary" id="sfSave">계정 만들기</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="pwDlg" style="width:min(420px,94vw)">
   <form id="pwForm">
@@ -254,19 +283,28 @@
     document.getElementById("suspectCard").hidden = false;
   }
 
+  let staffBranches = [];
   async function loadStaff(me) {
     const { data: rows, error } = await db.from("staff").select("*").order("created_at");
     if (error) return;
+    const { data: brs } = await db.from("branches").select("id,name").order("created_at");
+    staffBranches = brs || [];
+    const brName = Object.fromEntries(staffBranches.map((b) => [b.id, b.name]));
     const isHq = me.role === "hq_admin";
     document.getElementById("staffCard").hidden = false;
     document.getElementById("actCol").textContent = isHq ? "변경" : "";
     document.getElementById("staffNote").hidden = !isHq;
+    document.getElementById("addStaffBtn").hidden = !isHq;
+    staffMe = me;
 
     const tbody = document.getElementById("staffRows");
     tbody.replaceChildren();
     for (const r of rows) {
       const tr = document.createElement("tr");
-      tr.append(el("td", r.name), el("td", ROLE[r.role]), el("td", r.can_edit_wage ? "가능" : "불가"));
+      const st = el("td", r.active ? "사용 중" : "사용 중지");
+      if (!r.active) st.style.color = "#b3261e";
+      tr.append(el("td", r.name), el("td", r.branch_id ? brName[r.branch_id] || "-" : "전체 지점"), el("td", ROLE[r.role]),
+        el("td", r.can_edit_wage ? "가능" : "불가"), st);
       const act = el("td");
       if (isHq) {
         const b = el("button", r.can_edit_wage ? "단가·수수료 수정 끄기" : "단가·수수료 수정 켜기");
@@ -281,13 +319,78 @@
           const rb = el("button", "비밀번호 재설정");
           rb.style.marginLeft = "6px";
           rb.addEventListener("click", () => resetStaffPw(r, rb));
-          act.append(rb);
+          const ab = el("button", r.active ? "사용 중지" : "다시 사용", r.active ? "danger" : "");
+          ab.style.marginLeft = "6px";
+          ab.addEventListener("click", async () => {
+            const q = r.active
+              ? r.name + " 님의 계정을 사용 중지합니다.\n이 직원은 더 이상 프로그램을 쓸 수 없습니다. (기록은 그대로 남습니다)\n계속할까요?"
+              : r.name + " 님의 계정을 다시 사용하게 합니다. 계속할까요?";
+            if (!confirm(q)) return;
+            ab.disabled = true;
+            const { error } = await db.from("staff").update({ active: !r.active }).eq("user_id", r.user_id);
+            if (error) { alert("변경하지 못했습니다."); ab.disabled = false; return; }
+            loadStaff(me);
+          });
+          act.append(rb, ab);
         }
       }
       tr.append(act);
       tbody.append(tr);
     }
   }
+
+  // 본사 관리자 전용 서버 기능(admin-set-password) 부르기. 실패하면 { msg } 에 이유
+  async function callAdminFn(body) {
+    const { data, error } = await db.functions.invoke("admin-set-password", { body });
+    if (!error && data && data.ok) return { data };
+    let msg = data && data.error;
+    if (!msg && error && error.context && typeof error.context.json === "function") {
+      try { msg = (await error.context.json()).error; } catch (_) {}
+    }
+    return { msg: msg || "처리하지 못했습니다. Supabase 에 서버 기능 admin-set-password 가 최신으로 올라가 있는지 확인해 주세요." };
+  }
+  async function showTempPw(name, pw) {
+    try { await navigator.clipboard.writeText(pw); } catch (_) {}
+    prompt(name + " 님의 임시 비밀번호입니다. (복사해 두었습니다)\n전화나 대면으로 직접 알려 주세요. 카톡·문자에 남기지 않는 것이 안전합니다.", pw);
+  }
+
+  // ----- 본사 관리자: 직원 추가 -----
+  let staffMe = null;
+  const staffDlg = document.getElementById("staffDlg");
+  document.getElementById("addStaffBtn").addEventListener("click", () => {
+    const sel = document.getElementById("sfBranch");
+    sel.replaceChildren(...staffBranches.map((b) => new Option(b.name, b.id)));
+    ["sfName", "sfEmail"].forEach((id) => { document.getElementById(id).value = ""; });
+    document.getElementById("sfRole").value = "branch_staff";
+    document.getElementById("sfWage").checked = false;
+    document.getElementById("sfErr").textContent = "";
+    staffDlg.showModal();
+  });
+  document.getElementById("sfCancel").addEventListener("click", () => staffDlg.close());
+  document.getElementById("staffForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("sfErr");
+    const name = document.getElementById("sfName").value.trim();
+    const email = document.getElementById("sfEmail").value.trim();
+    err.textContent = "";
+    if (!name) { err.textContent = "이름을 입력해 주세요."; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "이메일을 정확히 입력해 주세요."; return; }
+    const pw = tempPassword();
+    const save = document.getElementById("sfSave");
+    save.disabled = true;
+    const { msg } = await callAdminFn({
+      action: "create_staff", name, email, password: pw,
+      branch_id: document.getElementById("sfBranch").value,
+      role: document.getElementById("sfRole").value,
+      can_edit_wage: document.getElementById("sfWage").checked,
+    });
+    save.disabled = false;
+    if (msg) { err.textContent = msg; return; }
+    staffDlg.close();
+    await showTempPw(name, pw);
+    alert(name + " 님의 로그인 정보\n주소: " + location.origin + location.pathname.replace(/[^/]*$/, "") + "\n이메일: " + email + "\n비밀번호: 방금 알려 드린 임시 비밀번호");
+    loadStaff(staffMe);
+  });
 
   // ----- 본사 관리자: 직원 비밀번호를 임시 비밀번호로 다시 정해 주기 (서버 기능 admin-set-password) -----
   function tempPassword() {
@@ -298,18 +401,10 @@
     if (!confirm(r.name + " 님의 비밀번호를 새 임시 비밀번호로 바꿉니다.\n지금 쓰던 비밀번호는 더 이상 쓸 수 없고, 직원은 다음 로그인 때 자기 비밀번호를 새로 정해야 합니다.\n계속할까요?")) return;
     const pw = tempPassword();
     btn.disabled = true;
-    const { data, error } = await db.functions.invoke("admin-set-password", { body: { user_id: r.user_id, password: pw } });
+    const { msg } = await callAdminFn({ user_id: r.user_id, password: pw });
     btn.disabled = false;
-    if (error || !data || !data.ok) {
-      let msg = data && data.error;
-      if (!msg && error && error.context && typeof error.context.json === "function") {
-        try { msg = (await error.context.json()).error; } catch (_) {}
-      }
-      alert(msg || "비밀번호를 바꾸지 못했습니다. Supabase 에 서버 기능 admin-set-password 가 올라가 있는지 확인해 주세요.");
-      return;
-    }
-    try { await navigator.clipboard.writeText(pw); } catch (_) {}
-    prompt(r.name + " 님의 임시 비밀번호입니다. (복사해 두었습니다)\n전화나 대면으로 직접 알려 주세요. 카톡·문자에 남기지 않는 것이 안전합니다.", pw);
+    if (msg) { alert(msg); return; }
+    await showTempPw(r.name, pw);
   }
 
   // ----- 내 비밀번호 변경 (임시 비밀번호로 로그인한 경우에는 꼭 바꾸게 함) -----
